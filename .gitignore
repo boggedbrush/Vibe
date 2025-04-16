@@ -1,0 +1,18 @@
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Node modules
+node_modules/
+
+# C++ build artifacts
+*.o
+*.out
+vibe_cpp
+
+# Editor files
+*.swp
+*.swo
+.idea/
+.vscode/
