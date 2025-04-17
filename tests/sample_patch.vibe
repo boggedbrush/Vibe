@@ -1,0 +1,6 @@
+# VibeSpec: 1.0
+patch_type: add_function
+file: demo.py
+--- code: |
+    def hello():
+        print("Hello from CI!")

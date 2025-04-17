@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vibe Patch Specification v1.0 (frozen 2025‑04‑17)</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,sans-serif;line-height:1.5;margin:0 2rem;max-width:80ch}
+    h1,h2,h3{margin-top:2.2rem;line-height:1.3}
+    code,pre{font-family:SFMono-Regular,Consolas,monospace;font-size:0.95em;background:#f7f7f9;border-radius:4px;padding:0.15rem 0.3rem}
+    pre{padding:0.75rem;overflow-x:auto}
+    table{border-collapse:collapse;width:100%}
+    th,td{border:1px solid #ccc;padding:0.4rem 0.6rem;text-align:left}
+    th{background:#f0f0f0}
+  </style>
+</head>
+<body>
+<h1>Vibe Patch Specification <span style="font-size:0.75em">v1.0 (frozen 2025‑04‑17)</span></h1>
+<p>This document defines the <strong>stable, immutable</strong> rules that govern all Vibe Patch operations from version&nbsp;1.0 onward. Implementations <em>must</em> comply exactly; future revisions will increment the major or minor version and supersede this text.</p>
+
+<hr/>
+<h2 id="overview">1. Overview</h2>
+<p>A <em>Vibe Patch</em> is a plaintext directive that instructs an automated agent to add, remove, or modify code &amp; documentation inside an existing codebase <strong>without direct file editing by the human author</strong>. Each patch:</p>
+<ul>
+  <li>Targets a <code>file</code>, and—optionally—a <code>cell</code>, <code>class</code>, or <code>method</code> inside that file.</li>
+  <li>Declares its <strong>patch type</strong> (see §3).</li>
+  <li>Contains one or more <code>diff</code> blocks or replacement blobs.</li>
+  <li>Results in an automatic backup of the original file to <code>VibeBackups/&lt;filename&gt;_NN.py</code>.</li>
+</ul>
+
+<h2 id="versioning">2. Versioning &amp; Compliance</h2>
+<p>Add the header <code>VibeSpec: 1.0</code> to every patch file. Agents <em>must</em> decline to apply a patch if the spec header is missing or references an unknown version.</p>
+<pre><code># VibeSpec: 1.0
+# Patch‑ID: 2025‑04‑17T08‑15‑31Z‑add_method‑Greeter.say_hi
+</code></pre>
+
+<h2 id="types">3. Patch Types</h2>
+<table>
+<thead><tr><th>Identifier</th><th>Intent</th><th>Required fields</th></tr></thead>
+<tbody>
+<tr><td><code>add_function</code></td><td>Add a <strong>stand‑alone function</strong> to a cell or file.</td><td><code>file</code>, <code>cell?</code>, <code>code</code></td></tr>
+<tr><td><code>remove_function</code></td><td>Delete a function entirely.</td><td><code>file</code>, <code>cell?</code>, <code>name</code></td></tr>
+<tr><td><code>add_class</code></td><td>Create a new class at module‑level.</td><td><code>file</code>, <code>cell?</code>, <code>code</code></td></tr>
+<tr><td><code>remove_class</code></td><td>Delete a class definition.</td><td><code>file</code>, <code>cell?</code>, <code>name</code></td></tr>
+<tr><td><code>add_method</code></td><td>Insert a method <em>after the last existing</em> method of a class (blank line separation).</td><td><code>file</code>, <code>cell?</code>, <code>class</code>, <code>code</code></td></tr>
+<tr><td><code>remove_method</code></td><td>Delete a method from a class.</td><td><code>file</code>, <code>cell?</code>, <code>class</code>, <code>name</code></td></tr>
+<tr><td><code>spyder_cell_patch</code></td><td>Replace or append code inside a specific Spyder cell.</td><td><code>file</code>, <code>cell</code>, <code>mode</code> (<code>replace</code>/<code>append</code>), <code>code</code></td></tr>
+<tr><td><code>spec_update</code></td><td>Modify this specification itself.</td><td><code>file</code>=<kbd>spec</kbd>, <code>code</code></td></tr>
+</tbody></table>
+
+<h2 id="cells">4. Spyder Cells</h2>
+<ul>
+  <li>Cells are identified with the canonical marker <code>#%% Cell N</code> (1‑based).</li>
+  <li><strong>Append</strong> vs <strong>replace</strong> <code>mode</code><br/>
+    &nbsp;&nbsp;• <strong>append</strong>: insert <em>after</em> the final line of the target cell, preserving existing code.<br/>
+    &nbsp;&nbsp;• <strong>replace</strong>: swap the cell’s entire content.</li>
+  <li>If the target cell does not exist:<br/>
+    &nbsp;&nbsp;• <code>append</code> → create it.<br/>
+    &nbsp;&nbsp;• <code>replace</code> → error &amp; abort.</li>
+</ul>
+
+<h2 id="insertion">5. Insertion Rules</h2>
+<ol>
+  <li><strong>Classes/functions</strong> are inserted <em>after</em> the last top‑level element of the same kind (PEP‑8 grouping encouraged).</li>
+  <li><strong>Methods</strong> must appear after the final existing method of the class and be separated by exactly one blank line.</li>
+  <li>New code <em>must not</em> introduce trailing whitespace or tab indentation.</li>
+</ol>
+
+<h2 id="lint">6. Validation &amp; Linting</h2>
+<ul>
+  <li>Every patch runs through <code>vibe‑spec‑lint --strict</code> before application.</li>
+  <li>Checks include: AST parse, PEP‑8 indentation, no TODO markers, and placement compliance.</li>
+  <li>Failures abort the patch; the backup remains untouched.</li>
+</ul>
+
+<h2 id="backups">7. Automatic Backups</h2>
+<p>Prior to applying any patch, copy the target file to:</p>
+<pre><code>VibeBackups/&lt;filename&gt;_&lt;timestamp&gt;.py</code></pre>
+<p>Timestamp format: <code>YYYYMMDD_HHMMSS</code>.</p>
+
+<h2 id="examples">8. Worked Examples</h2>
+<h3>8.1 Adding a method to <code>Greeter</code></h3>
+<pre><code># VibeSpec: 1.0
+patch_type: add_method
+file: sample_vibe_test.py
+cell: 0
+class: Greeter
+--- code: |
+    def say_hi(self, name):
+        """Says hi to the person."""
+        print(f"Hi there, {name}!")
+</code></pre>
+
+<h3>8.2 Appending to Spyder Cell 2</h3>
+<pre><code># VibeSpec: 1.0
+patch_type: spyder_cell_patch
+file: my_notebook.py
+cell: 2
+mode: append
+--- code: |
+# new experimental plot
+plt.plot(x, y)
+</code></pre>
+
+<h2 id="ai">9. AI Prompt Templates (Guidance)</h2>
+<p>LLM‑based agents should prepare patches via a mental checklist:</p>
+<ol>
+  <li>Identify smallest viable <code>patch_type</code>.</li>
+  <li>Fill mandatory metadata headers <em>before</em> writing code.</li>
+  <li>Obey insertion &amp; lint rules; run tests locally when possible.</li>
+  <li>Include a concise commit‑style summary line <em>outside</em> the patch if needed.</li>
+</ol>
+
+<hr/>
+<p style="text-align:center">End of Vibe Patch Specification v1.0 – immutable.</p>
+</body>
+</html>
