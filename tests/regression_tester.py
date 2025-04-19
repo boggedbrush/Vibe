@@ -58,7 +58,10 @@ def main():
         print(f"[{['FAIL', 'PASS'][pass_fail]}]:{name}")
         n_pass += pass_fail
     print(f"{n_pass}/{len(results)} tests passed.")
-    sys.exit(0)
+    if n_pass == len(results):
+        sys.exit(0)
+    else:
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
