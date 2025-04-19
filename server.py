@@ -5,6 +5,8 @@ import argparse
 from pathlib import Path
 from flask import Flask, request, send_from_directory, Response
 import vibe_cli
+import subprocess
+from flask import jsonify
 
 # -----------------------------------------------------------------------------
 #  Parse command‑line args
@@ -88,6 +90,71 @@ def save_route():
     finally:
         os.unlink(tmp_path)
 
+    return "", 204
+
+# -----------------------------------------------------------------------------
+#  Version browsing endpoints
+# -----------------------------------------------------------------------------
+
+@app.route("/versions", methods=["GET"])
+def list_versions():
+    """
+    GET /versions?file=path/to/file.py
+    Returns a JSON list of commits touching that file:
+      [ { "sha": "...", "date": "2025-04-18 18:00:00 -0400" }, ... ]
+    """
+    file = request.args.get("file")
+    if not file:
+        return "Missing 'file' param", 400
+
+    # git log: SHA|timestamp
+    cmd = ["git", "log", "--pretty=format:%H|%ci", "--", file]
+    out = subprocess.check_output(cmd, cwd=BASE_DIR).decode()
+    lst = []
+    for line in out.splitlines():
+        sha, dt = line.split("|", 1)
+        lst.append({"sha": sha, "date": dt})
+    return jsonify(lst)
+
+
+@app.route("/version", methods=["GET"])
+def get_version():
+    """
+    GET /version?file=path/to/file.py&sha=<commit>
+    Returns the file content at that commit.
+    """
+    file = request.args.get("file")
+    sha  = request.args.get("sha")
+    if not file or not sha:
+        return "Missing 'file' or 'sha' param", 400
+
+    cmd = ["git", "show", f"{sha}:{file}"]
+    try:
+        content = subprocess.check_output(cmd, cwd=BASE_DIR).decode()
+    except subprocess.CalledProcessError:
+        return "Could not retrieve version", 500
+    return Response(content, mimetype="text/plain")
+
+
+@app.route("/revert", methods=["POST"])
+def revert_version():
+    """
+    POST /revert
+    JSON { "file": "path/to/file.py", "sha": "<commit>" }
+    Overwrites the file on disk with the version at that commit.
+    """
+    payload = request.get_json(force=True)
+    file = payload.get("file")
+    sha  = payload.get("sha")
+    if not file or not sha:
+        return "Missing 'file' or 'sha' in JSON", 400
+
+    cmd = ["git", "show", f"{sha}:{file}"]
+    content = subprocess.check_output(cmd, cwd=BASE_DIR).decode()
+
+    target = BASE_DIR / file
+    target.write_text(content)
+    _log("Reverted {} to {}", file, sha)
     return "", 204
 
 # -----------------------------------------------------------------------------
