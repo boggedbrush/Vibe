@@ -24,7 +24,7 @@ jobs:
           pip install flask
 
       - name: 🔧 Generate expected files
-        run: python make_expected.py
+        run: python tests/make_expected.py
 
       - name: ✅ Run regression tests
         run: python tests/regression_tester.py
