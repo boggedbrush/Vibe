@@ -1,4 +1,4 @@
-name: Vibe Patch v2 CI
+name: Vibe Patch CI
 
 on:
   push:
@@ -6,11 +6,11 @@ on:
   pull_request:
 
 jobs:
-  build-and-test:
+  test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: ⬇️ Check out
+      - name: ⬇️ Check out code
         uses: actions/checkout@v4
 
       - name: 🐍 Set up Python
@@ -23,8 +23,5 @@ jobs:
           python -m pip install --upgrade pip
           pip install flask
 
-      - name: 🔧 Generate expected files
-        run: python tests/make_expected.py
-
-      - name: ✅ Run regression tests
+      - name: ✅ Run regression suite
         run: python tests/regression_tester.py
