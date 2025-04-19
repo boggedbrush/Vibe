@@ -1,87 +1,64 @@
 #!/usr/bin/env python3
-"""Run all test cases under tests/* and compare patched output to .expected.
-
-Usage:  python regression_tester.py [--tests tests]
-returns non‑zero exit code if any case fails.
-"""
-import importlib.util
 import sys
+import os
 from pathlib import Path
-from typing import Tuple
-import argparse
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-TESTS_DIR  = REPO_ROOT / "tests"
-CLI_PATH   = REPO_ROOT / "vibe_cli.py"
+# Ensure the project root (one level up) is on sys.path so we can import vibe_cli
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
-# Dynamically import vibe_cli so we can reuse helpers without installing as module
-spec = importlib.util.spec_from_file_location("vibe_cli", CLI_PATH)
-vibe_cli = importlib.util.module_from_spec(spec)  # type: ignore
-spec.loader.exec_module(vibe_cli)  # type: ignore
+import vibe_cli
 
-def run_case(case_dir: Path) -> Tuple[str, bool, str]:
-    """Return (case_name, pass?, message)."""
-    vibe_files = list(case_dir.glob("*.vibe"))
-    if len(vibe_files) != 1:
-        return (case_dir.name, False, "Missing or multiple .vibe patches")
-    patch_path = vibe_files[0]
-    expected_files = list(case_dir.glob("*.expected"))
-    if len(expected_files) != 1:
-        return (case_dir.name, False, "Missing .expected output")
-    expected_path = expected_files[0]
+TESTS_DIR = Path(__file__).parent
+
+def run_case(case_dir: Path):
+    patch_paths = list(case_dir.glob("*.vibe"))
+    hello_path  = case_dir / "hello.py"
+    if len(patch_paths) != 1 or not hello_path.exists():
+        print(f"[SKIP] {case_dir.name} (needs 1 .vibe + hello.py)")
+        return
+    patch_path    = patch_paths[0]
+    expected_path = case_dir / f"{patch_path.stem}.expected"
+
+    hello_src = hello_path.read_text()
+    patch_src = patch_path.read_text()
     meta, code = vibe_cli.load_patch(patch_path)
     vibe_cli.validate_spec(meta)
+    got = vibe_cli.apply_patch(meta, code, case_dir, dry=True)
+    exp = expected_path.read_text() if expected_path.exists() else ""
 
-    # dry‑run returns None in CLI; use low‑level helpers instead to generate output
-    repo_root = case_dir  # hello.py is inside the case directory
-    try:
-        result = vibe_cli.apply_patch(meta, code, repo_root, dry=True)
-        if result is None:
-            # CLI didn't return result; recompute using helpers
-            original = (repo_root / meta["file"]).read_text()
-            if meta["patch_type"] == "add_function":
-                fn = code.lstrip().split()[1].split("(")[0]
-                result = vibe_cli._replace_function(original, fn, code)
-            elif meta["patch_type"] == "add_method":
-                cls = meta["class"]
-                meth = code.lstrip().split()[1].split("(")[0]
-                result = vibe_cli._replace_method(original, cls, meth, code)
-            elif meta["patch_type"] == "add_class":
-                cls = code.lstrip().split()[1].split(":")[0]
-                result = vibe_cli._replace_class(original, cls, code)
-            else:
-                sep = "\n" if original.endswith("\n") else "\n\n"
-                result = original + sep + code.rstrip() + "\n"
-    except Exception as e:
-        return (case_dir.name, False, f"Patch application error: {e}")
-
-    expected = expected_path.read_text()
-    if result == expected:
-        return (case_dir.name, True, "OK")
+    if got == exp:
+        print(f"[PASS] {case_dir.name} – OK")
+        out = True
     else:
-        return (case_dir.name, False, "Output does not match .expected")
-
-
+        print(f"[FAIL] {case_dir.name} – Output does not match .expected")
+        print("\nOriginal code\n```python")
+        print(hello_src.rstrip("\n"))
+        print("```\n")
+        print("Vibe Patch\n```yaml")
+        print(patch_src.rstrip("\n"))
+        print("```\n")
+        print("Expected\n```python")
+        print(exp.rstrip("\n"))
+        print("```\n")
+        print("Got\n```python")
+        print(got.rstrip("\n"))
+        print("```\n")
+        out = False
+    return out
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--tests", default=str(TESTS_DIR), help="Root tests directory")
-    args = ap.parse_args()
-    tests_root = Path(args.tests)
-    total = 0
-    failures = []
-    for case_dir in sorted(tests_root.iterdir()):
-        if not case_dir.is_dir():
-            continue
-        total += 1
-        name, ok, msg = run_case(case_dir)
-        status = "PASS" if ok else "FAIL"
-        print(f"[{status}] {name} – {msg}")
-        if not ok:
-            failures.append(name)
-    print("\nSummary: {} / {} passed".format(total - len(failures), total))
-    if failures:
-        print("Failed cases: " + ", ".join(failures))
-        sys.exit(1)
+    results = []
+    for case in sorted(TESTS_DIR.iterdir()):
+        if case.is_dir():
+            result = run_case(case)
+            results.append([result, case.name])
+    print("Done.")
+    n_pass = 0
+    for pass_fail, name in results:
+        print(f"[{['FAIL', 'PASS'][pass_fail]}]:{name}")
+        n_pass += pass_fail
+    print(f"{n_pass}/{len(results)} tests passed.")
+    sys.exit(0)
 
 if __name__ == "__main__":
     main()

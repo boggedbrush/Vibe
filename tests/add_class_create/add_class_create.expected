@@ -4,8 +4,4 @@ def greet(name):
 
 class Greeter:
     def __init__(self, name):
-        print(f'Hello {name}')
-
-class Fareweller:
-    def say_bye(self, name):
-        print(f"Bye‑bye, {name}!")
+        print(f"Hello, {name}!")

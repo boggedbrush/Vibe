@@ -1,8 +1,7 @@
-# VibeSpec: 1.0
+# VibeSpec: 1.2
 patch_type: add_method
 file: hello.py
 class: Greeter
 --- code: |
-def greet(self):
-    print("Greeter says hi!")
-
+    def greet(self):
+        print("Greeter says hi!")

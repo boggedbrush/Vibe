@@ -62,36 +62,52 @@ def load_patch(path: Path) -> Tuple[Dict[str, Any], str]:
 
 def validate_spec(meta: Dict[str, Any]) -> None:
     """
-    Ensure the patch metadata is well‐formed and supported.
+    Ensure the patch metadata is well‑formed and supported.
     Raises ValueError on any problem.
     """
-    # Base requirements
+    # 1) Required keys
     required = {"VibeSpec", "patch_type", "file"}
-    missing  = required - set(meta.keys())
+    missing = required - set(meta.keys())
     if missing:
         raise ValueError(f"Missing meta keys: {sorted(missing)}")
 
-    # Spec version (allow v1.0 and v1.2 for backwards compatibility)
+    # 2) Spec version (allow 1.0, 1.2, 1.3, 1.4)
     vs = meta["VibeSpec"]
-    if vs not in ("1.0", "1.2"):
+    if vs not in ("1.0", "1.2", "1.3", "1.4"):
         raise ValueError(f"Unsupported VibeSpec version: {vs}")
 
-    # patch_type must be one of the supported set
+    # 3) Supported patch types
     pt = meta["patch_type"]
-    if pt not in ("add_function", "add_method", "add_class", "add_block"):
+    allowed = {
+        "add_function", "add_method", "add_class", "add_block",
+        "remove_function", "remove_method", "remove_class", "remove_block"
+    }
+    if pt not in allowed:
         raise ValueError(f"Unsupported patch_type: {pt}")
 
-    # class key required for add_method
-    if pt == "add_method" and not meta.get("class"):
-        raise ValueError("`class` key is required for add_method")
+    # 4) 'class' key required for method patches
+    if pt in ("add_method", "remove_method") and not meta.get("class"):
+        raise ValueError("`class` key is required for method patches")
 
-    # add_block additional checks
+    # 5) 'name' key required for named removals
+    if pt in ("remove_function", "remove_method", "remove_class") and not meta.get("name"):
+        raise ValueError("`name` key is required for named removal patches")
+
+    # 6) add_block additional checks
     if pt == "add_block":
         pos = meta.get("position", "end")
         if pos not in ("start", "end", "before", "after"):
             raise ValueError(f"Invalid position for add_block: {pos}")
         if pos in ("before", "after") and not meta.get("anchor"):
-            raise ValueError("`anchor` regex is required for add_block before/after")
+            raise ValueError("add_block with before/after requires an `anchor` regex")
+
+    # 7) remove_block additional checks (anchors optional)
+    if pt == "remove_block":
+        # if one anchor given, require the other
+        has_start = "anchor_start" in meta
+        has_end   = "anchor_end" in meta
+        if has_start ^ has_end:
+            raise ValueError("remove_block requires both `anchor_start` and `anchor_end` when using anchors")
 
 # =============================================================================
 #  Backup helper
@@ -211,6 +227,133 @@ def _replace_method(src: str, cls: str, meth: str, block: str) -> str:
     return "".join(lines[:end_idx] + [block + "\n\n"] + lines[end_idx:])
 
 # =============================================================================
+#  Removal helpers
+# =============================================================================
+
+def _remove_between(src: str, start_pat: str, end_pat: str) -> str:
+    """
+    Remove every line from the first match of start_pat through
+    (and including) the first match of end_pat.
+    """
+    import re
+    lines = src.splitlines(keepends=True)
+    start_re = re.compile(start_pat)
+    end_re   = re.compile(end_pat)
+    out = []
+    removing = False
+
+    for ln in lines:
+        if not removing and start_re.search(ln):
+            removing = True
+            continue
+        if removing:
+            if end_re.search(ln):
+                removing = False
+            continue
+        out.append(ln)
+    return "".join(out)
+
+
+def _remove_function(src: str, name: str) -> str:
+    """
+    Remove a top‑level function named `name` (its entire def … body).
+    """
+    import re
+    lines = src.splitlines(keepends=True)
+    pat   = re.compile(rf"^(\s*)def\s+{re.escape(name)}\s*\(", re.MULTILINE)
+    m     = pat.search(src)
+    if not m:
+        return src
+
+    indent = len(m.group(1))
+    # start at the line *after* the def – skip the header itself
+    start  = src[:m.start()].count("\n") + 1
+    end    = start + 1
+
+    # consume until we hit a line with indentation ≤ the function header
+    while end < len(lines):
+        ln = lines[end]
+        ws = len(ln) - len(ln.lstrip())
+        if ln.strip() and ws <= indent:
+            break
+        end += 1
+
+    # splice out [start:end]
+    return "".join(lines[:start] + lines[end:])
+
+def _remove_class(src: str, cls: str) -> str:
+    """
+    Remove an entire class definition (header + indented block).
+    """
+    import re
+    lines = src.splitlines(keepends=True)
+    # find class header
+    for i, ln in enumerate(lines):
+        if re.match(rf"^\s*class\s+{re.escape(cls)}\b", ln):
+            indent = len(ln) - len(ln.lstrip())
+            start  = i
+            break
+    else:
+        return src
+    end = start + 1
+    # consume indented block
+    while end < len(lines):
+        ln = lines[end]
+        ws = len(ln) - len(ln.lstrip())
+        if ln.strip() and ws <= indent:
+            break
+        end += 1
+    return "".join(lines[:start] + lines[end:])
+
+
+def _remove_method(src: str, cls: str, meth: str) -> str:
+    """
+    Remove a method named `meth` inside class `cls`.
+    """
+    import re
+    lines = src.splitlines(keepends=True)
+
+    # Locate the class header
+    cls_pat = re.compile(rf"^(\s*)class\s+{re.escape(cls)}\b", re.MULTILINE)
+    mcls    = cls_pat.search(src)
+    if not mcls:
+        return src
+    cls_indent = len(mcls.group(1))
+
+    # Determine the start/end lines of the class body
+    start = src[:mcls.start()].count("\n") + 1
+    end   = start + 1
+    while end < len(lines):
+        ln = lines[end]
+        ws = len(ln) - len(ln.lstrip())
+        if ln.strip() and ws <= cls_indent:
+            break
+        end += 1
+
+    # Find the method within that slice
+    meth_pat = re.compile(rf"^(\s*)def\s+{re.escape(meth)}\s*\(")
+    for i in range(start, end):
+        mn = meth_pat.match(lines[i])
+        if not mn:
+            continue
+        indent = len(mn.group(1))
+        mstart = i
+        mend   = mstart + 1
+        # Swallow the method body
+        while mend < end:
+            ln = lines[mend]
+            ws = len(ln) - len(ln.lstrip())
+            if ln.strip() and ws <= indent:
+                break
+            mend += 1
+
+        # Splice out signature+body
+        return "".join(lines[:mstart] + lines[mend:end] + lines[end:])
+
+    return src
+
+
+# =============================================================================
 #  Apply patch
 # =============================================================================
 
@@ -282,6 +425,34 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
             trimmed = src.rstrip("\n")
             new_src = trimmed + "\n\n" + block + "\n"
 
+    elif pt == "remove_function":
+        # remove a top‐level function by its name
+        func_name = meta["name"]
+        new_src = _remove_function(src, func_name)
+
+    elif pt == "remove_method":
+        # remove a method inside a class by its name
+        cls_name  = meta["class"]
+        meth_name = meta["name"]
+        new_src = _remove_method(src, cls_name, meth_name)
+
+    elif pt == "remove_class":
+        # remove an entire class by its name
+        cls_name = meta["name"]
+        new_src   = _remove_class(src, cls_name)
+
+    elif pt == "remove_block":
+        # generic block removal by anchors or literal match
+        if "anchor_start" in meta and "anchor_end" in meta:
+            new_src = _remove_between(
+                src,
+                meta["anchor_start"],
+                meta["anchor_end"]
+            )
+        else:
+            # delete the exact code lines (if any) or do nothing
+            literal = code.rstrip() + "\n"
+            new_src  = src.replace(literal, "")
     else:
         # fallback behavior for unknown patch types
         trimmed = src.rstrip("\n")

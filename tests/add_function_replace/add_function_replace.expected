@@ -1,7 +1,8 @@
 # hello.py
 def greet(name):
-    print(f"Hey there, {name}!")   # new behavior
+    print(f"Hello, {name}!")
+def farewell(name):
+    print(f"See you later, {name}!)  # new behavior
 
-class Greeter:
-    def __init__(self, name):
-        print(f'Hello {name}')
+def farewell(name):
+    print(f"Goodbye, {name}!")

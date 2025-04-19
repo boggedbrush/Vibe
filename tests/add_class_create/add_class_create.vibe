@@ -1,7 +1,7 @@
-# VibeSpec: 1.0
+# VibeSpec: 1.2
 patch_type: add_class
 file: hello.py
 --- code: |
-class Fareweller:
-    def say_bye(self, name):
-        print(f"Bye‑bye, {name}!")
+    class Greeter:
+        def __init__(self, name):
+            print(f"Hello, {name}!")
