@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vibe Patch Diff UI</title>
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    #toolbar {
+      padding: 8px;
+      background: #f3f3f3;
+      border-bottom: 1px solid #ccc;
+    }
+    #toolbar button {
+      margin-right: 8px;
+    }
+    #diff {
+      height: calc(100% - 42px);
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs/loader.js"></script>
+</head>
+<body>
+  <div id="toolbar">
+    <button id="loadFileBtn">Load File</button>
+    <button id="loadPatchBtn">Load Patch</button>
+    <button id="acceptBtn" disabled>Accept</button>
+
+    <!-- hidden file inputs -->
+    <input type="file" id="fileInput1" accept=".py" style="display:none">
+    <input type="file" id="fileInput2" accept=".vibe,.txt" style="display:none">
+  </div>
+
+  <div id="diff"></div>
+
+  <script>
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs' }});
+    require(['vs/editor/editor.main'], function () {
+      const diffEditor = monaco.editor.createDiffEditor(
+        document.getElementById('diff'),
+        { readOnly: true, renderSideBySide: true }
+      );
+
+      const loadFileBtn  = document.getElementById('loadFileBtn');
+      const loadPatchBtn = document.getElementById('loadPatchBtn');
+      const acceptBtn    = document.getElementById('acceptBtn');
+      const fileInput1   = document.getElementById('fileInput1');
+      const fileInput2   = document.getElementById('fileInput2');
+
+      let origText = '';
+      let patchedText = '';
+      let patchText = '';
+
+      // 1. Load original Python file
+      loadFileBtn.addEventListener('click', () => fileInput1.click());
+      fileInput1.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+          origText = ev.target.result;
+          const model = monaco.editor.createModel(origText, 'python');
+          diffEditor.setModel({ original: model, modified: model });
+          acceptBtn.disabled = true;
+        };
+        reader.readAsText(file);
+      });
+
+      // 2. Load patch and immediately fetch the patched source
+      loadPatchBtn.addEventListener('click', () => fileInput2.click());
+      fileInput2.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async ev => {
+          patchText = ev.target.result;
+
+          // Call the server's dry-run endpoint
+          const resp = await fetch('/apply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              original: origText,
+              patch: patchText
+            })
+          });
+          if (!resp.ok) {
+            alert('Patch failed: ' + resp.statusText);
+            return;
+          }
+          patchedText = await resp.text();
+
+          // Update the diff editor
+          const origModel = monaco.editor.createModel(origText, 'python');
+          const modModel  = monaco.editor.createModel(patchedText, 'python');
+          diffEditor.setModel({ original: origModel, modified: modModel });
+
+          acceptBtn.disabled = false;
+        };
+        reader.readAsText(file);
+      });
+
+      // 3. Accept → send to server to write file AND update left pane
+      acceptBtn.addEventListener('click', async () => {
+        const resp = await fetch('/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ patch: patchText })
+        });
+        if (!resp.ok) {
+          alert('Save failed: ' + resp.statusText);
+          return;
+        }
+        // On success, refresh the left/original pane to the patched content
+        origText = patchedText;
+        const newOrigModel = monaco.editor.createModel(origText, 'python');
+        diffEditor.setModel({ original: newOrigModel, modified: newOrigModel });
+        acceptBtn.disabled = true;
+      });
+    });
+  </script>
+</body>
+</html>

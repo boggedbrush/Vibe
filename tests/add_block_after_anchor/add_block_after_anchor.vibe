@@ -1,0 +1,8 @@
+# VibeSpec: 1.2
+patch_type: add_block
+file: hello.py
+position: after
+anchor: "^def greet"
+--- code: |
+  # >>> Inserted after the greet() function
+  greet = wrap_with_logging(greet)

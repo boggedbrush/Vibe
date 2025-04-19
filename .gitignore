@@ -16,3 +16,6 @@ vibe_cpp
 *.swo
 .idea/
 .vscode/
+*~
+*#
+Vibe/Backups/

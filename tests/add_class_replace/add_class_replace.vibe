@@ -1,0 +1,10 @@
+# VibeSpec: 1.0
+patch_type: add_class
+file: hello.py
+--- code: |
+class Greeter:
+    def __init__(self, name):
+        print(f'Greetings, {name}! (new)')
+
+    def greet(self):
+        print("Greeter 2.0 at your service!")

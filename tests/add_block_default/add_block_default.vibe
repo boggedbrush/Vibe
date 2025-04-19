@@ -1,0 +1,6 @@
+# VibeSpec: 1.2
+patch_type: add_block
+file: hello.py
+--- code: |
+  # >>> Default append at EOF
+  print("Finished patch tests")

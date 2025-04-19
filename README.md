@@ -1,27 +1,65 @@
-# Vibe
+## v2.0‑beta: Split‑Screen UI & HTTP Wrapper
 
-A multi-language scaffold for the Vibe project.  This repo hosts:
+A brand‑new browser‑based UI for visual patch review + one‑click apply.
 
-- **vibe.py**  — Python implementation
-- **vibe.js**  — JavaScript/Node.js implementation
-- **vibe.cpp** — C++ implementation
+### Launch the HTTP server
 
-## Getting Started
+```bash
+pip install flask
+python server.py --baseDir .
 
-1. Clone this repository:
-   ```bash
-   git clone git@github.com:wyojustin/Vibe.git
-   cd Vibe
+This serves the UI at http://localhost:8000/.
+Using the UI
 
-    Run the Python version:
+    Load File – pick your .py file
 
-python3 vibe.py
+    Load Patch – pick a .vibe patch (dry‑run & diff shown automatically)
 
-Run the JS version:
+    Accept – applies the patch to disk under --baseDir and refreshes the UI
 
-node vibe.js
+Running regression tests
 
-Compile and run the C++ version:
+python make_expected.py
+python tests/regression_tester.py
 
-g++ -o vibe_cpp vibe.cpp
-./vibe_cpp
+Continuous integration
+
+We’ve added a GitHub Actions workflow (see .github/workflows/v2-ci.yml) that installs dependencies, runs make_expected.py, and verifies every patch case on each push or PR.
+
+
+---
+
+### 2. Create **.github/workflows/v2-ci.yml**
+
+Create the folder if needed and then the file:
+
+```bash
+mkdir -p .github/workflows
+cat > .github/workflows/v2-ci.yml << 'EOF'
+name: Vibe Patch v2 CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Check out
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flask
+
+      - name: ✅ Run regression tests
+        run: python tests/regression_tester.py

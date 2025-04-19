@@ -1,0 +1,8 @@
+# VibeSpec: 1.2
+patch_type: add_block
+file: hello.py
+position: start
+--- code: |
+  # >>> Inserted at top
+  import logging
+  logging.basicConfig(level=logging.INFO)

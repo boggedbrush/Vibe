@@ -1,0 +1,8 @@
+# VibeSpec: 1.2
+patch_type: add_block
+file: hello.py
+position: end
+--- code: |
+  # >>> Inserted at EOF
+  if __name__ == "__main__":
+      greet("World")

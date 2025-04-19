@@ -1,0 +1,9 @@
+# VibeSpec: 1.2
+patch_type: add_block
+file: hello.py
+position: before
+anchor: "^class Greeter"
+--- code: |
+  # >>> Inserted before Greeter class
+  def helper():
+      return True

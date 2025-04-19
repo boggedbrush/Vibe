@@ -1,0 +1,6 @@
+# VibeSpec: 1.0
+patch_type: add_function
+file: hello.py
+--- code: |
+def greet(name):
+    print(f"Hey there, {name}!")   # new behavior
