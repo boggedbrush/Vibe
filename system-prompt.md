@@ -53,7 +53,7 @@ file: hello.py
 
 add_function_replace
 
-'''
+```
 # VibeSpec: 1.4
 patch_type: replace_function
 file: hello.py
