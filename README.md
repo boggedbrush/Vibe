@@ -23,7 +23,7 @@ An interactive tool for applying, reviewing, and managing incremental code patch
 2. Install dependencies:
    ```bash
     pip install -r requirements.txt                 # install reqs
-   '''
+   ```
 3. Run tests
    ```bash
     python tests/regression_tester.py               # run the regression tests
@@ -52,6 +52,7 @@ An interactive tool for applying, reviewing, and managing incremental code patch
    ```text
    Please review the system-prompt and create a Vibe Patch to add a new class called GrumpyGreater to hello.py
    ```
+   ![PLACEHOLDER: AI Uload and Prompt](docs/screenshots/ai-upload-and-prompt.png)
 2. The AI returns a patch spec:
    ```yaml
    # VibeSpec: 1.5
@@ -68,12 +69,11 @@ An interactive tool for applying, reviewing, and managing incremental code patch
            def greet(self):
                print(f"{self.name}, what do you want?")
    ```
+   ![PLACEHOLDER: AI Response](docs/screenshots/ai-upload-response.png)
 3. Paste this patch into the bottom editor and click **Update Diff** to preview:
 
    ![PLACEHOLDER: AI Patch Preview](docs/screenshots/ai-patch-preview.png)
 4. Click **Accept Changes** to apply the class into `hello.py`:
-
-   ![PLACEHOLDER: Applied AI Patch](docs/screenshots/ai-patch-applied.png)
 
 ## Example
 
