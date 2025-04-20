@@ -31,6 +31,24 @@ while enabling a robust patching system that is robust to white space difference
 3. Run tests
    ```bash
     python tests/regression_tester.py               # run the regression tests
+✅ add_block_after_anchor
+✅ add_block_before_anchor
+✅ add_block_default
+✅ add_block_end
+✅ add_block_start
+✅ add_class_create
+✅ add_class_replace
+✅ add_function_create
+✅ add_function_replace
+✅ add_insulter_class
+✅ add_method_create
+✅ add_method_replace
+✅ multi_patch
+✅ remove_block
+✅ remove_class
+✅ remove_function
+✅ remove_method
+17/17 tests passed.
    ```
 4. Copy example
    ```bash
