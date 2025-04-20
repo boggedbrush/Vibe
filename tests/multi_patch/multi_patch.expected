@@ -1,0 +1,10 @@
+# hello.py
+def greet(name):
+    print(f"Greetings, {name}!")
+
+def farewell(name):
+    print(f"Goodbye, {name}!")
+
+class Greeter:
+    def greet(self):
+        print("Greeter says hi!")
