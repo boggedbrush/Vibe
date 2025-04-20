@@ -2,6 +2,10 @@
 
 An interactive tool for applying, reviewing, and managing incremental code patches in your projects that also integrates AI-driven patch generation via conversational prompts. Leveraging the Vibe Patches specification, this tool provides a streamlined UI for generating, previewing, and committing code changes.
 
+Coding with AI can be fun, rewarding, and profitable, but it can also be frustrating and time consuming.  This tool aims to bridge this between time, before AI takes over all programming tasks, but providing you with the tools you need to 
+code in confidence knowing that you can revert any changes that break your code, as well as remove common frustrations of dealing with larger code bases when the AI becomes reluctant to provide the whole code.  This minimizes required AI output
+while enabling a robust patching system that is robust to white space differences that plague the traditional patch system.
+
 ## Features
 
 - **Apply Vibe Patches**: Seamlessly apply `add_function`, `add_method`, `add_class`, and `add_block` patches to your source files.
@@ -74,48 +78,6 @@ An interactive tool for applying, reviewing, and managing incremental code patch
 
    ![PLACEHOLDER: AI Patch Preview](docs/screenshots/ai-patch-preview.png)
 4. Click **Accept Changes** to apply the class into `hello.py`:
-
-## Example
-
-To try a multi-patch workflow:
-
-1. Copy the `tests/multi_patch` directory to a temporary location:
-
-   ```bash
-   cp -r tests/multi_patch /tmp/example
-   ```
-
-2. Launch the server pointing at your temp directory:
-
-   ```bash
-   python run_server.py --baseDir /tmp/example
-   ```
-
-   ![PLACEHOLDER: Server Console Output](docs/screenshots/server-launch.png)
-
-3. In your browser, upload `hello.py` and then the patch bundle `multi_patch.vibe`:
-
-   ![PLACEHOLDER: Load File and Patch](docs/screenshots/load-file-patch.png)
-
-4. Review the proposed changes in the diff viewer and click **Apply Changes**:
-
-   ![PLACEHOLDER: Diff Viewer Before Apply](docs/screenshots/diff-before.png)
-
-5. After applying, inspect the updated preview:
-
-   ![PLACEHOLDER: Diff Viewer After Apply](docs/screenshots/diff-after.png)
-
-6. Use the **Previous** button to revert to the prior version if desired:
-
-   ![PLACEHOLDER: Revert to Previous Version](docs/screenshots/revert.png)
-
-## Usage
-
-Detailed usage examples and command-line options will be added here.
-
-## Contributing
-
-Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 
