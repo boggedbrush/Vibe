@@ -55,7 +55,7 @@ def main():
     print("Done.")
     n_pass = 0
     for pass_fail, name in results:
-        print(f"[{['FAIL', 'PASS'][pass_fail]}]:{name}")
+        print(f"{['❌', '✅'][pass_fail]} {name}")
         n_pass += pass_fail
     print(f"{n_pass}/{len(results)} tests passed.")
     if n_pass == len(results):
