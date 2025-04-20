@@ -9,6 +9,73 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 import textwrap
 
+import tempfile
+from typing import List, Tuple
+
+def load_patches(path: Path) -> List[Tuple[Dict[str, Any], str]]:
+    """
+    Parse a .vibe file with one or more patches (v1.5).
+    Returns a list of (meta, code) tuples, in document order.
+    """
+    lines = path.read_text().splitlines(keepends=True)
+    patches: List[Tuple[Dict[str, Any], str]] = []
+
+    # If not v1.5 batch, fall back
+    if not lines or "VibeSpec: 1.5" not in lines[0]:
+        return [load_patch(path)]
+
+    i = 1  # skip header
+    while i < len(lines):
+        # find next patch_type
+        if not lines[i].startswith("patch_type:"):
+            i += 1
+            continue
+
+        # collect metadata until code marker
+        meta_block = []
+        while i < len(lines) and not lines[i].startswith("--- code"):
+            meta_block.append(lines[i])
+            i += 1
+
+        if i >= len(lines):
+            raise ValueError("Malformed multi-patch: missing '--- code'")
+        i += 1  # skip '--- code' line
+
+        # collect only indented code lines
+        code_block = []
+        while i < len(lines):
+            ln = lines[i]
+            # stop on next patch header or non-indented line
+            if ln.startswith("patch_type:") or not ln.startswith((" ", "\t")):
+                break
+            code_block.append(ln)
+            i += 1
+
+        # rebuild a standalone snippet
+        snippet = "".join([
+            "# VibeSpec: 1.5\n",
+            *meta_block,
+            "--- code\n",
+            *code_block
+        ])
+        # parse it
+        tmpdir = tempfile.mkdtemp()
+        tmpf   = Path(tmpdir) / "part.vibe"
+        tmpf.write_text(snippet)
+        meta, code = load_patch(tmpf)
+        patches.append((meta, code))
+        shutil.rmtree(tmpdir)
+
+    return patches
+
+def apply_patches(patches: List[Tuple[Dict[str, Any], str]], repo: Path, dry: bool=False):
+    """
+    Apply each (meta, code) in sequence.
+    """
+    for meta, code in patches:
+        validate_spec(meta)
+        apply_patch(meta, code, repo, dry=dry)
+
 # =============================================================================
 #  Utility helpers
 # =============================================================================
@@ -60,7 +127,99 @@ def load_patch(path: Path) -> Tuple[Dict[str, Any], str]:
 
     return meta, "\n".join(code_lines)
 
+    def validate_spec(meta: Dict[str, Any]) -> None:
+        """
+        Ensure the patch metadata is well‑formed and supported.
+        Raises ValueError on any problem.
+        """
+        required = {"VibeSpec", "patch_type", "file"}
+        missing  = required - set(meta.keys())
+        if missing:
+            raise ValueError(f"Missing meta keys: {sorted(missing)}")
+
+        # Allow v1.0, v1.2, v1.3, v1.4, and batch spec 1.5
+        vs = meta["VibeSpec"]
+        if vs not in ("1.0", "1.2", "1.3", "1.4", "1.5"):
+            raise ValueError(f"Unsupported VibeSpec version: {vs}")
+
+        pt = meta["patch_type"]
+        allowed = {
+            "add_function", "add_method", "add_class", "add_block", "replace_block",
+            "remove_function", "remove_method", "remove_class", "remove_block"
+        }
+        if pt not in allowed:
+            raise ValueError(f"Unsupported patch_type: {pt}")
+
+        # class key required for method patches
+        if pt in ("add_method", "remove_method") and not meta.get("class"):
+            raise ValueError("`class` key required for method patches")
+
+        # name key required for named removals
+        if pt in ("remove_function", "remove_method", "remove_class") and not meta.get("name"):
+            raise ValueError("`name` key required for named removal patches")
+
+        # add_block extra checks
+        if pt == "add_block":
+            pos = meta.get("position", "end")
+            if pos not in ("start", "end", "before", "after"):
+                raise ValueError(f"Invalid add_block position: {pos}")
+            if pos in ("before", "after") and not meta.get("anchor"):
+                raise ValueError("add_block before/after requires an `anchor` regex")
+
+        # remove_block extra checks
+        if pt == "remove_block":
+            has_s = "anchor_start" in meta
+            has_e = "anchor_end"   in meta
+            if has_s ^ has_e:
+                raise ValueError("remove_block requires both `anchor_start` and `anchor_end` when using anchors")
+
 def validate_spec(meta: Dict[str, Any]) -> None:
+    """
+    Ensure the patch metadata is well‑formed and supported.
+    Raises ValueError on any problem.
+    """
+    required = {"VibeSpec", "patch_type", "file"}
+    missing  = required - set(meta.keys())
+    if missing:
+        raise ValueError(f"Missing meta keys: {sorted(missing)}")
+
+    # Allow v1.0, v1.2, v1.3, v1.4, and batch spec 1.5
+    vs = meta["VibeSpec"]
+    if vs not in ("1.0", "1.2", "1.3", "1.4", "1.5"):
+        raise ValueError(f"Unsupported VibeSpec version: {vs}")
+
+    pt = meta["patch_type"]
+    allowed = {
+        "add_function", "add_method", "add_class", "add_block", "replace_block",
+        "remove_function", "remove_method", "remove_class", "remove_block"
+    }
+    if pt not in allowed:
+        raise ValueError(f"Unsupported patch_type: {pt}")
+
+    # class key required for method patches
+    if pt in ("add_method", "remove_method") and not meta.get("class"):
+        raise ValueError("`class` key required for method patches")
+
+    # name key required for named removals
+    if pt in ("remove_function", "remove_method", "remove_class") and not meta.get("name"):
+        raise ValueError("`name` key required for named removal patches")
+
+    # add_block extra checks
+    if pt == "add_block":
+        pos = meta.get("position", "end")
+        if pos not in ("start", "end", "before", "after"):
+            raise ValueError(f"Invalid add_block position: {pos}")
+        if pos in ("before", "after") and not meta.get("anchor"):
+            raise ValueError("add_block before/after requires an `anchor` regex")
+
+    # remove_block extra checks
+    if pt == "remove_block":
+        has_s = "anchor_start" in meta
+        has_e = "anchor_end"   in meta
+        if has_s ^ has_e:
+            raise ValueError("remove_block requires both `anchor_start` and `anchor_end` when using anchors")
+
+def old_validate_spec(meta: Dict[str, Any]) -> None:
     """
     Ensure the patch metadata is well‑formed and supported.
     Raises ValueError on any problem.
@@ -79,8 +238,8 @@ def validate_spec(meta: Dict[str, Any]) -> None:
     # 3) Supported patch types
     pt = meta["patch_type"]
     allowed = {
-        "add_function", "add_method", "add_class", "add_block",
-        "remove_function", "remove_method", "remove_class", "remove_block"
+        "add_function", "add_method", "add_class", "add_block", 
+        "remove_function", "remove_method", "remove_class", "remove_block",
     }
     if pt not in allowed:
         raise ValueError(f"Unsupported patch_type: {pt}")
@@ -370,7 +529,10 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
     lines = src.splitlines(keepends=True)
 
     if pt == "add_function":
-        name = re.match(r"def\s+(\w+)", block).group(1)
+        print("===")
+        print(block)
+        print("----")
+        name = re.match(r"def\s+(\w+)", block, re.MULTILINE).group(1)
         new_src = _replace_function(src, name, block)
 
     elif pt == "add_method":
@@ -484,25 +646,35 @@ def build_cli() -> argparse.ArgumentParser:
 
 
 def cmd_lint(args: argparse.Namespace) -> None:
-    meta, _ = load_patch(args.patch)
-    validate_spec(meta)
-    _log("Lint OK ({})", meta["patch_type"])
-
+    # batch‑aware lint
+    patches = load_patches(args.patch)
+    for meta, _ in patches:
+        validate_spec(meta)
+    _log(f"Lint OK ({len(patches)} patches)")
 
 def cmd_preview(args: argparse.Namespace) -> None:
-    meta, code = load_patch(args.patch)
-    validate_spec(meta)
-    tgt = args.repo / meta["file"]
-    tmp = Path(os.getenv("TMPDIR", "/tmp")) / f"vibe_prev_{tgt.name}"
-    tmp.write_text(tgt.read_text() + "\n" + code + "\n")
-    subprocess.call(["diff", "-u", str(tgt), str(tmp)])
-
+    # batch‑aware preview
+    patches = load_patches(args.patch)
+    tmpdir  = Path(tempfile.mkdtemp())
+    # copy affected files
+    for meta, _ in patches:
+        src = args.repo / meta["file"]
+        dst = tmpdir / meta["file"]
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(src.read_text())
+    apply_patches(patches, tmpdir, dry=False)
+    # show diffs
+    for meta, _ in patches:
+        orig = args.repo / meta["file"]
+        new  = tmpdir   / meta["file"]
+        print(f"--- diff {meta['file']} ---")
+        subprocess.call(["diff","-u", str(orig), str(new)])
+    shutil.rmtree(tmpdir)
 
 def cmd_apply(args: argparse.Namespace) -> None:
-    meta, code = load_patch(args.patch)
-    validate_spec(meta)
-    apply_patch(meta, code, args.repo, dry=args.dry)
-
+    # batch‑aware apply
+    patches = load_patches(args.patch)
+    apply_patches(patches, args.repo, dry=args.dry)
 
 if __name__ == "__main__":
     cli = build_cli()

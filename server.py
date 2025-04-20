@@ -2,11 +2,13 @@
 import os
 import tempfile
 import argparse
-from pathlib import Path
-from flask import Flask, request, send_from_directory, Response
-import vibe_cli
+import shutil
 import subprocess
-from flask import jsonify
+from pathlib import Path
+
+from flask import Flask, request, send_from_directory, Response, jsonify
+
+import vibe_cli
 
 # -----------------------------------------------------------------------------
 #  Parse command‑line args
@@ -41,41 +43,57 @@ app = Flask(__name__, static_folder="ui", static_url_path="")
 def index():
     return send_from_directory(app.static_folder, "vibe_diff.html")
 
-@app.route("/apply", methods=["POST"])
+# -----------------------------------------------------------------------------
+#  Apply (preview) route – supports multi‑patch bundles
+# -----------------------------------------------------------------------------
+@app.route('/apply', methods=['POST'])
 def apply_route():
-    """
-    Dry‑run endpoint: returns the patched file text without writing.
-    """
-    payload = request.get_json(force=True)
-    orig  = payload.get("original")
-    patch = payload.get("patch")
-    if orig is None or patch is None:
-        return "Missing 'original' or 'patch' in JSON", 400
+    # Load patch text from JSON or form
+    data = {}
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        pass
+    patch_text = data.get('patch') or request.form.get('patch')
+    if not patch_text:
+        return "Missing 'patch' payload (expecting JSON or form‑field 'patch')", 400
 
-    # Create a temp workspace
+    # 1) Dump the uploaded .vibe into a temp file
     tmpdir     = Path(tempfile.mkdtemp())
-    patch_path = tmpdir / "patch.vibe"
-    patch_path.write_text(patch)
+    patch_file = tmpdir / "upload.vibe"
+    patch_file.write_text(patch_text)
 
-    # Parse the patch to learn which file to modify
-    meta, code = vibe_cli.load_patch(patch_path)
-    vibe_cli.validate_spec(meta)
+    # 2) Parse out one or more patches
+    patches = vibe_cli.load_patches(patch_file)
 
-    # Write the original content under the correct filename
-    orig_path = tmpdir / meta["file"]
-    orig_path.parent.mkdir(parents=True, exist_ok=True)
-    orig_path.write_text(orig)
+    # 3) Copy each target file into tmpdir
+    for meta, _ in patches:
+        src = BASE_DIR / meta["file"]
+        dst = tmpdir   / meta["file"]
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(src.read_text())
 
-    # Perform dry‑run apply
-    new_text = vibe_cli.apply_patch(meta, code, tmpdir, dry=True)
-    return Response(new_text, mimetype="text/plain")
+    # 4) Apply all patches in dry‑run mode
+    vibe_cli.apply_patches(patches, tmpdir, dry=False)
 
-# Real save: applies patch under BASE_DIR
+    # 5) Read back each patched file
+    results = {}
+    for meta, _ in patches:
+        fn = meta["file"]
+        results[fn] = (tmpdir / fn).read_text()
+
+    # 6) Cleanup and respond
+    shutil.rmtree(tmpdir)
+    return jsonify(results), 200
+
+# -----------------------------------------------------------------------------
+#  Save (commit) route – single‐patch only
+# -----------------------------------------------------------------------------
 @app.route("/save", methods=["POST"])
 def save_route():
-    payload = request.get_json(force=True)
+    payload = request.get_json(force=True) or {}
     patch = payload.get("patch")
-    if patch is None:
+    if not patch:
         return "Missing 'patch' in JSON", 400
 
     # Write the patch to a temp file so we can parse it
@@ -85,7 +103,6 @@ def save_route():
     try:
         meta, code = vibe_cli.load_patch(tmp_path)
         vibe_cli.validate_spec(meta)
-        # Apply into BASE_DIR
         vibe_cli.apply_patch(meta, code, BASE_DIR, dry=False)
     finally:
         os.unlink(tmp_path)
@@ -95,34 +112,22 @@ def save_route():
 # -----------------------------------------------------------------------------
 #  Version browsing endpoints
 # -----------------------------------------------------------------------------
-
 @app.route("/versions", methods=["GET"])
 def list_versions():
-    """
-    GET /versions?file=path/to/file.py
-    Returns a JSON list of commits touching that file:
-      [ { "sha": "...", "date": "2025-04-18 18:00:00 -0400" }, ... ]
-    """
     file = request.args.get("file")
     if not file:
         return "Missing 'file' param", 400
 
-    # git log: SHA|timestamp
     cmd = ["git", "log", "--pretty=format:%H|%ci", "--", file]
     out = subprocess.check_output(cmd, cwd=BASE_DIR).decode()
     lst = []
     for line in out.splitlines():
         sha, dt = line.split("|", 1)
         lst.append({"sha": sha, "date": dt})
-    return jsonify(lst)
-
+    return jsonify(lst), 200
 
 @app.route("/version", methods=["GET"])
 def get_version():
-    """
-    GET /version?file=path/to/file.py&sha=<commit>
-    Returns the file content at that commit.
-    """
     file = request.args.get("file")
     sha  = request.args.get("sha")
     if not file or not sha:
@@ -135,15 +140,9 @@ def get_version():
         return "Could not retrieve version", 500
     return Response(content, mimetype="text/plain")
 
-
 @app.route("/revert", methods=["POST"])
 def revert_version():
-    """
-    POST /revert
-    JSON { "file": "path/to/file.py", "sha": "<commit>" }
-    Overwrites the file on disk with the version at that commit.
-    """
-    payload = request.get_json(force=True)
+    payload = request.get_json(force=True) or {}
     file = payload.get("file")
     sha  = payload.get("sha")
     if not file or not sha:
@@ -154,14 +153,12 @@ def revert_version():
 
     target = BASE_DIR / file
     target.write_text(content)
-    _log("Reverted {} to {}", file, sha)
     return "", 204
 
 # -----------------------------------------------------------------------------
 #  Entry point
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Ensure BASE_DIR exists
     if not BASE_DIR.exists():
         raise RuntimeError(f"baseDir does not exist: {BASE_DIR}")
     app.run(host=args.host, port=args.port)
