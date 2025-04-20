@@ -4,14 +4,20 @@ on:
   push:
     branches: [ main ]
   pull_request:
+  workflow_dispatch:
 
 jobs:
-  test:
+  build-and-test:
     runs-on: ubuntu-latest
 
     steps:
       - name: ⬇️ Check out code
         uses: actions/checkout@v4
+
+      - name: 📂 Debug workspace contents
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -R .
 
       - name: 🐍 Set up Python
         uses: actions/setup-python@v5
@@ -23,5 +29,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install flask
 
-      - name: ✅ Run regression suite
-        run: python tests/regression_tester.py
+      - name: ✅ Run regression tests
+        run: |
+          python tests/regression_tester.py
