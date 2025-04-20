@@ -1,109 +1,111 @@
-# Vibe Patch Toolkit
+# Interactive Patching Tool
 
-Iterative, human‑readable code patching via `.vibe` files, with both a CLI and a browser‑based UI.
+An interactive tool for applying, reviewing, and managing incremental code patches in your projects that also integrates AI-driven patch generation via conversational prompts. Leveraging the Vibe Patches specification, this tool provides a streamlined UI for generating, previewing, and committing code changes.
 
----
+## Features
 
-## Quick start
+- **Apply Vibe Patches**: Seamlessly apply `add_function`, `add_method`, `add_class`, and `add_block` patches to your source files.
+- **Version Navigation**: Browse through patch history with forward and backward controls.
+- **Backup Originals**: Automatically back up original files before applying changes.
+- **Dry-Run Mode**: Preview patches without modifying disk files.
+- **Diff Viewer**: See side-by-side diffs of pending and applied changes.
 
-```bash
-# Lint a patch
-python vibe_cli.py lint path/to/patch.vibe
+## Installation
 
-# Preview changes (uses $DIFFTOOL or diff -u fallback)
-python vibe_cli.py preview path/to/patch.vibe [repo_dir]
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/your-org/interactive-patching-tool.git
+   cd interactive-patching-tool
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Start the UI:
+   ```bash
+   python run_server.py
+   ```
 
-# Apply changes (backs up modified files under VibeBackups/)
-python vibe_cli.py apply path/to/patch.vibe [repo_dir]
+## Quick Start
 
-v1.x: CLI & Regression Tests
+1. Open the tool in your browser at `http://localhost:8000`.
+2. Load a target file or directory.
+3. Create or load a Vibe Patch YAML file.
+4. Preview the diff and click **Apply Changes**.
+5. Navigate through backups using the **Previous** and **Next** buttons.
 
-Write your patches as simple YAML + a --- code: block.
-Test fixtures live under tests/; regenerate or verify with:
+## AI-Aided Patch Creation Example
 
-# (Re)generate expected outputs (optional for v1.x)
-python tests/make_expected.py
+1. In the chat prompt, ask:
+   ```text
+   Please review the system-prompt and create a Vibe Patch to add a new class called GrumpyGreater to hello.py
+   ```
+2. The AI returns a patch spec:
+   ```yaml
+   # VibeSpec: 1.5
+   patch_type: add_class
+   file: hello.py
+   --- code: |
+       class GrumpyGreater:
+           """
+           A grumpy greeter that begrudgingly greets.
+           """
+           def __init__(self, name):
+               self.name = name
 
-# Run the full regression suite
-python tests/regression_tester.py
+           def greet(self):
+               print(f"{self.name}, what do you want?")
+   ```
+3. Paste this patch into the bottom editor and click **Update Diff** to preview:
 
-v1.4: Name‑Only Removals
+   ![PLACEHOLDER: AI Patch Preview](docs/screenshots/ai-patch-preview.png)
+4. Click **Accept Changes** to apply the class into `hello.py`:
 
-You can now remove functions, methods, or classes by name only:
+   ![PLACEHOLDER: Applied AI Patch](docs/screenshots/ai-patch-applied.png)
 
-# VibeSpec: 1.4
-patch_type: remove_function
-file: hello.py
-name: farewell
+## Example
 
-# VibeSpec: 1.4
-patch_type: remove_method
-file: hello.py
-class: Greeter
-name: old_method
+To try a multi-patch workflow:
 
-# VibeSpec: 1.4
-patch_type: remove_class
-file: hello.py
-name: OldClass
+1. Copy the `tests/multi_patch` directory to a temporary location:
 
-Blocks can still be removed via anchors or literal match:
+   ```bash
+   cp -r tests/multi_patch /tmp/example
+   ```
 
-# VibeSpec: 1.4
-patch_type: remove_block
-file: hello.py
-anchor_start: "^# begin-delete"
-anchor_end:   "^# end-delete"
+2. Launch the server pointing at your temp directory:
 
-v1.5: Multi‑Patch Bundles
+   ```bash
+   python run_server.py --baseDir /tmp/example
+   ```
 
-Bundle several patches in one .vibe file and apply them in order:
+   ![PLACEHOLDER: Server Console Output](docs/screenshots/server-launch.png)
 
-# VibeSpec: 1.5
+3. In your browser, upload `hello.py` and then the patch bundle `multi_patch.vibe`:
 
-# --- Patch 1: replace greet()
-patch_type: replace_function
-file: hello.py
---- code: |
-    def greet(name):
-        print(f"Greetings, {name}!")
+   ![PLACEHOLDER: Load File and Patch](docs/screenshots/load-file-patch.png)
 
-# --- Patch 2: add farewell()
-patch_type: add_function
-file: hello.py
---- code: |
-    def farewell(name):
-        print(f"Goodbye, {name}!")
+4. Review the proposed changes in the diff viewer and click **Apply Changes**:
 
-CLI usage remains the same:
+   ![PLACEHOLDER: Diff Viewer Before Apply](docs/screenshots/diff-before.png)
 
-python vibe_cli.py lint   multi.vibe
-python vibe_cli.py preview multi.vibe [repo_dir]
-python vibe_cli.py apply  multi.vibe [repo_dir]
+5. After applying, inspect the updated preview:
 
-v2.0‑beta: Split‑Screen UI & HTTP Wrapper
+   ![PLACEHOLDER: Diff Viewer After Apply](docs/screenshots/diff-after.png)
 
-A lightweight Flask server plus Monaco diff editor:
+6. Use the **Previous** button to revert to the prior version if desired:
 
-pip install flask
-python server.py --baseDir .
+   ![PLACEHOLDER: Revert to Previous Version](docs/screenshots/revert.png)
 
-    Load File – pick your .py
+## Usage
 
-    Load Patch – pick your .vibe (diff shows automatically)
+Detailed usage examples and command-line options will be added here.
 
-    Accept – writes patched file under --baseDir and refreshes UI
+## Contributing
 
-Continuous Integration
+Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-GitHub Actions workflow (.github/workflows/v2-ci.yml) runs on push/PR:
+## License
 
-    Checks out code
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
-    Sets up Python & Flask
-
-    Runs regression tests against committed .expected files
-
-No manual regeneration needed—just commit your new fixtures and patches.
-
-Enjoy chaining and reviewing code patches with Vibe! 🚀
