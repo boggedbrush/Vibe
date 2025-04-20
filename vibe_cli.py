@@ -6,65 +6,125 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import List, Tuple, Dict, Any
 import textwrap
-
 import tempfile
-from typing import List, Tuple
+import yaml
+from textwrap import dedent
 
-def load_patches(path: Path) -> List[Tuple[Dict[str, Any], str]]:
+def load_patches(patch_path: Path) -> List[Tuple[Dict[str, Any], str]]:
     """
-    Parse a .vibe file with one or more patches (v1.5).
-    Returns a list of (meta, code) tuples, in document order.
+    Load one or more VibeSpec patches from a .vibe file.
+    Returns a list of (metadata_dict, code_str) tuples.
     """
-    lines = path.read_text().splitlines(keepends=True)
+    text = patch_path.read_text()
+    lines = text.splitlines()
     patches: List[Tuple[Dict[str, Any], str]] = []
+    i = 0
+    current_version: Any = None
 
-    # If not v1.5 batch, fall back
-    if not lines or "VibeSpec: 1.5" not in lines[0]:
-        return [load_patch(path)]
-
-    i = 1  # skip header
     while i < len(lines):
-        # find next patch_type
-        if not lines[i].startswith("patch_type:"):
+        line = lines[i]
+        # Skip blank lines
+        if not line.strip():
             i += 1
             continue
 
-        # collect metadata until code marker
-        meta_block = []
-        while i < len(lines) and not lines[i].startswith("--- code"):
-            meta_block.append(lines[i])
+        # Capture VibeSpec header
+        m = re.match(r'^#\s*VibeSpec:\s*(\d+\.\d+)', line)
+        if m:
+            current_version = m.group(1)
+            i += 1
+            continue
+
+        # Read metadata lines until code block or end of metadata
+        meta_lines: List[str] = []
+        while i < len(lines) and not lines[i].startswith("--- code:"):
+            meta_lines.append(lines[i])
+            i += 1
+
+        # Parse metadata YAML
+        meta: Dict[str, Any] = yaml.safe_load("\n".join(meta_lines)) or {}
+        if current_version:
+            meta["VibeSpec"] = current_version
+
+        # Read optional code block
+        code = ""
+        if i < len(lines) and lines[i].startswith("--- code:"):
+            i += 1
+            code_lines: List[str] = []
+            while i < len(lines):
+                ln = lines[i]
+                # stop on next patch header
+                if ln.startswith("patch_type:"):
+                    break
+                # stop on non-indented, non-blank line
+                if ln.strip() and not ln.startswith((" ", "\t")):
+                    break
+                code_lines.append(ln)
+                i += 1
+            code = dedent("\n".join(code_lines)).rstrip("\n")
+
+        patches.append((meta, code))
+
+    return patches
+
+def old_load_patches(patch_path: Path) -> List[Tuple[Dict, str]]:
+    """
+    Load one or more VibeSpec patches from a .vibe file,
+    capturing the VibeSpec version and parsing metadata.
+    Returns a list of (metadata_dict, code_str) tuples.
+    """
+    text = patch_path.read_text()
+    lines = text.splitlines()
+    patches = []
+    current_version = None
+    i = 0
+
+    while i < len(lines):
+        # Skip blank lines
+        if not lines[i].strip():
+            i += 1
+            continue
+
+        # Capture VibeSpec header version
+        if lines[i].startswith("# VibeSpec:"):
+            current_version = lines[i].split("# VibeSpec:", 1)[1].strip()
+            i += 1
+            continue
+
+        # Read metadata lines until the '--- code:' marker
+        meta_lines = []
+        while i < len(lines) and not lines[i].startswith('--- code:'):
+            meta_lines.append(lines[i])
             i += 1
 
         if i >= len(lines):
-            raise ValueError("Malformed multi-patch: missing '--- code'")
-        i += 1  # skip '--- code' line
+            break
 
-        # collect only indented code lines
-        code_block = []
+        # Parse metadata YAML
+        meta = yaml.safe_load("\n".join(meta_lines)) or {}
+
+        # Attach version metadata if available
+        if current_version is not None:
+            meta['VibeSpec'] = current_version
+
+        # Skip the code-block header
+        i += 1
+
+        # Collect code block lines (allow blank lines)
+        code_lines = []
         while i < len(lines):
             ln = lines[i]
-            # stop on next patch header or non-indented line
-            if ln.startswith("patch_type:") or not ln.startswith((" ", "\t")):
+            if ln.startswith("patch_type:"):
                 break
-            code_block.append(ln)
+            if ln.strip() and not ln.startswith((" ", "\t")):
+                break
+            code_lines.append(ln)
             i += 1
 
-        # rebuild a standalone snippet
-        snippet = "".join([
-            "# VibeSpec: 1.5\n",
-            *meta_block,
-            "--- code\n",
-            *code_block
-        ])
-        # parse it
-        tmpdir = tempfile.mkdtemp()
-        tmpf   = Path(tmpdir) / "part.vibe"
-        tmpf.write_text(snippet)
-        meta, code = load_patch(tmpf)
+        code = dedent("\n".join(code_lines)).rstrip("\n")
         patches.append((meta, code))
-        shutil.rmtree(tmpdir)
 
     return patches
 
@@ -186,7 +246,7 @@ def validate_spec(meta: Dict[str, Any]) -> None:
     # Allow v1.0, v1.2, v1.3, v1.4, and batch spec 1.5
     vs = meta["VibeSpec"]
     if vs not in ("1.0", "1.2", "1.3", "1.4", "1.5"):
-        raise ValueError(f"Unsupported VibeSpec version: {vs}")
+        raise ValueError(f"Unsupported VibeSpec version: '{vs}'")
 
     pt = meta["patch_type"]
     allowed = {
@@ -517,6 +577,133 @@ def _remove_method(src: str, cls: str, meth: str) -> str:
 # =============================================================================
 
 def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
+    """
+    Apply a single VibeSpec patch described by meta and code to the target file.
+    """
+    target = repo / meta["file"]
+    if not target.exists():
+        raise FileNotFoundError(target)
+    _log("Backup → {}", _backup(target))
+
+    src = target.read_text()
+    pt = meta["patch_type"]
+    block = dedent(code).rstrip("\n")
+    lines = src.splitlines(keepends=True)
+
+    def _remove_block(lines, start_re, end_re=None, indent_sensitive=False):
+        new_lines = []
+        skipping = False
+        base_indent = None
+
+        for ln in lines:
+            if not skipping and start_re.search(ln):
+                skipping = True
+                if indent_sensitive:
+                    base_indent = len(ln) - len(ln.lstrip())
+                continue
+            if skipping:
+                if end_re:
+                    if end_re.search(ln):
+                        skipping = False
+                    continue
+                if indent_sensitive:
+                    curr_indent = len(ln) - len(ln.lstrip())
+                    if curr_indent > base_indent and ln.strip():
+                        continue
+                    else:
+                        skipping = False
+                else:
+                    if not ln.strip() or ln.startswith((" ", "\t")):
+                        continue
+                    else:
+                        skipping = False
+            new_lines.append(ln)
+        return "".join(new_lines)
+
+    if pt == "add_function":
+        m = re.match(r"def\s+(\w+)", block, re.MULTILINE)
+        if not m:
+            raise ValueError(f"Invalid add_function block, no function signature found in:\n{block}")
+        name = m.group(1)
+        new_src = _replace_function(src, name, block)
+
+    elif pt == "add_method":
+        cls = meta.get("class", "")
+        m = re.match(r"def\s+(\w+)", block)
+        if not m:
+            raise ValueError(f"Invalid add_method block, no method signature found in:\n{block}")
+        name = m.group(1)
+        new_src = _replace_method(src, cls, name, block)
+
+    elif pt == "add_class":
+        mcls = re.match(r"class\s+(\w+)", block)
+        cls_name = mcls.group(1) if mcls else None
+        if cls_name and re.search(rf"^\s*class\s+{re.escape(cls_name)}\b", src, re.MULTILINE):
+            new_src = _replace_class(src, cls_name, block)
+        else:
+            trimmed = src.rstrip("\n")
+            new_src = trimmed + "\n\n" + block + "\n"
+
+    elif pt == "add_block":
+        pos = meta.get("position", "end")
+        anchor = meta.get("anchor")
+        if pos == "start":
+            new_src = block + "\n\n" + src
+        elif pos in ("before", "after") and anchor:
+            pat = re.compile(anchor)
+            idx = next((i for i, ln in enumerate(lines) if pat.search(ln)), len(lines))
+            if pos == "after":
+                indent = len(lines[idx]) - len(lines[idx].lstrip())
+                j = idx + 1
+                while j < len(lines):
+                    ln = lines[j]
+                    ws = len(ln) - len(ln.lstrip())
+                    if ln.strip() and ws <= indent:
+                        break
+                    j += 1
+                idx = j
+            if idx > 0 and lines[idx - 1].strip():
+                lines.insert(idx, "\n")
+                idx += 1
+            lines.insert(idx, block + "\n")
+            lines.insert(idx + 1, "\n")
+            new_src = "".join(lines)
+        else:
+            trimmed = src.rstrip("\n")
+            new_src = trimmed + "\n\n" + block + "\n"
+
+    elif pt == "remove_block":
+        start_re = re.compile(meta["anchor_start"])
+        end_re = re.compile(meta["anchor_end"])
+        new_src = _remove_block(lines, start_re, end_re)
+
+    elif pt == "remove_function":
+        func_name = meta["name"]
+        start_re = re.compile(rf"^def {re.escape(func_name)}\b")
+        new_src = _remove_block(lines, start_re)
+
+    elif pt == "remove_method":
+        meth_name = meta["name"]
+        start_re = re.compile(rf"^[ \t]*def {re.escape(meth_name)}\b")
+        new_src = _remove_block(lines, start_re, indent_sensitive=True)
+
+    elif pt == "remove_class":
+        cls_rm = meta["name"]
+        start_re = re.compile(rf"^class {re.escape(cls_rm)}\b")
+        new_src = _remove_block(lines, start_re)
+
+    else:
+        trimmed = src.rstrip("\n")
+        new_src = trimmed + "\n\n" + block + "\n"
+
+    if dry:
+        print(new_src)
+        return new_src
+
+    target.write_text(new_src)
+    _log("Patch applied to {}", target)
+
+def old_apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
     target = repo / meta["file"]
     if not target.exists():
         raise FileNotFoundError(target)
@@ -525,13 +712,10 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
     pt  = meta["patch_type"]
 
     # Dedent once—applies to all block types
-    block = textwrap.dedent(code).rstrip("\n")
+    block = dedent(code).rstrip("\n")
     lines = src.splitlines(keepends=True)
 
     if pt == "add_function":
-        print("===")
-        print(block)
-        print("----")
         name = re.match(r"def\s+(\w+)", block, re.MULTILINE).group(1)
         new_src = _replace_function(src, name, block)
 
@@ -541,8 +725,16 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
         new_src = _replace_method(src, cls, name, block)
 
     elif pt == "add_class":
-        cls     = re.match(r"class\s+(\w+)", block).group(1)
-        new_src = _replace_class(src, cls, block)
+        # If the class already exists, replace it; otherwise append the full block.
+        mcls = re.match(r"class\s+(\w+)", block)
+        cls  = mcls.group(1) if mcls else None
+        if cls and re.search(rf"^\s*class\s+{re.escape(cls)}\b", src, re.MULTILINE):
+            # replace existing class definition
+            new_src = _replace_class(src, cls, block)
+        else:
+            # append the new class (including all methods) at EOF
+            trimmed = src.rstrip("\n")
+            new_src = trimmed + "\n\n" + block + "\n"
 
     elif pt == "add_block":
         pos    = meta.get("position", "end")

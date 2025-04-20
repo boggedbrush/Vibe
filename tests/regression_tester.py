@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 import shutil
+import argparse
 
 # Ensure the project root (one level up) is on sys.path so we can import vibe_cli
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -63,9 +64,18 @@ def run_case(case_dir: Path):
         print(got.rstrip("\n"))
         print("```\n")
         return False
+
 def main():
+    parser = argparse.ArgumentParser(description="Run regression tests")
+    parser.add_argument('--unit_test_dir', default=None,
+                        help="Directory containing unit test cases")
+    args = parser.parse_args()
     results = []
-    for case in sorted(TESTS_DIR.iterdir()):
+    if args.unit_test_dir:
+        cases = [Path(args.unit_test_dir)]
+    else:
+        cases = sorted(TESTS_DIR.iterdir())
+    for case in cases:
         if case.is_dir():
             result = run_case(case)
             results.append([result, case.name])
