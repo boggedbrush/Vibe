@@ -14,23 +14,35 @@ An interactive tool for applying, reviewing, and managing incremental code patch
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-org/interactive-patching-tool.git
-   cd interactive-patching-tool
+    conda create -n vibe python=3.12 -y             # [optional]
+    conda activate vibe                             # [optional]
+    cd ~/code/                                      # use your code directory
+    git clone git@github.com:wyojustin/Vibe.git     # clone the repo
+    cd Vibe                                            
    ```
 2. Install dependencies:
    ```bash
-   pip install -r requirements.txt
-   ```
-3. Start the UI:
+    pip install -r requirements.txt                 # install reqs
+   '''
+3. Run tests
    ```bash
-   python run_server.py
+    python tests/regression_tester.py               # run the regression tests
+   ```
+4. Copy example
+   ```bash
+   cp -r tests/multi_patch/ ~/tmp/example/        # save to tmp for testing
+   ```
+5. Start the UI:
+   ```bash
+    python server.py --help                         # check out the options
+    python server.py --baseDir ~/tmp/example        # launch server
    ```
 
 ## Quick Start
 
 1. Open the tool in your browser at `http://localhost:8000`.
-2. Load a target file or directory.
-3. Create or load a Vibe Patch YAML file.
+2. Load a target file or directory. (~/tmp/example/hello.py)
+3. Create or load a Vibe Patch YAML file. (~/tmp/example/multi_patch.vibe)
 4. Preview the diff and click **Apply Changes**.
 5. Navigate through backups using the **Previous** and **Next** buttons.
 
