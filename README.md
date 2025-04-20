@@ -70,7 +70,7 @@ while enabling a robust patching system that is robust to white space difference
 
 ## AI-Aided Patch Creation Example
 
-1. In the chat prompt, ask:
+1. Upload the "Vibe/system-prompt.md" and "~/tmp/example/hello.py" In the chat prompt, ask:
    ```text
    Please review the system-prompt and create a Vibe Patch to add a new class called GrumpyGreater to hello.py
    ```
