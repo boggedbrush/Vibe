@@ -1,0 +1,4 @@
+# VibeSpec: 1.4
+patch_type: remove_class
+file: hello.py
+name: OldClass

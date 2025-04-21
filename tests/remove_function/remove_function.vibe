@@ -1,0 +1,4 @@
+# VibeSpec: 1.4
+patch_type: remove_function
+file: hello.py
+name: farewell

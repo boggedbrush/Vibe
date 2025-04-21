@@ -1,0 +1,13 @@
+# VibeSpec: 1.5
+patch_type: add_class
+file: hello.py
+--- code: |
+    class Insulter:
+        """
+        A class that issues a playful insult to a given name.
+        """
+        def __init__(self, name):
+            self.name = name
+
+        def insult(self):
+            print(f"{self.name}, you're a nincompoop!")

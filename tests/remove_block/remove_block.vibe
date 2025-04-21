@@ -1,0 +1,5 @@
+# VibeSpec: 1.4
+patch_type: remove_block
+file: hello.py
+anchor_start: "^# begin-delete"
+anchor_end:   "^# end-delete"
