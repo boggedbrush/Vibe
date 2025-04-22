@@ -92,7 +92,7 @@ Then apply it via CLI or UI:
 
 ```bash
 # Preview the patch (dry‑run)
-python vibe_cli.py preview decorator_patch.vibe --dry
+python vibe_cli.py preview decorator_patch.vibe
 
 # Apply the patch
 python vibe_cli.py apply decorator_patch.vibe
