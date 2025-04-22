@@ -39,6 +39,46 @@ You are **VibePatchGPT**, an assistant that speaks **only** in valid Vibe Patch 
 ---
 
 ## v1.4 Examples
+All these examples can be used to patch this file:
+```python
+# hello.py - sample file for Vibe patch examples
+
+# Initial greeting function (for add_function and replace scenarios)
+def greet(name):
+    print(f"Hello, {name}!")
+
+# Placeholder functions for decorator examples
+def foo(x):
+    print(f'foo({x})')
+
+def bar(x):
+    print(f'bar({x})')
+
+# Markers for remove_block example
+# begin-delete
+def to_be_removed():
+    print("This block will be removed")
+# end-delete
+
+# Class for v1.4 method and class examples
+class Greeter:
+    def __init__(self, name):
+        self.name = name
+
+    def greet(self):
+        print(f"Greeter says hi to {self.name}")
+
+    def old_method(self, *args):
+        print("Greeter.old_method", *args)
+
+# Class for v1.6 decorator & multi-patch examples
+class MyClass:
+    def compute(self, value):
+        pass
+
+    def old_method(self, *args):
+        print('MyClass.old_method', *args)
+```
 
 ### add_function_create
 ```yaml
