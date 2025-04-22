@@ -16,6 +16,71 @@ def load_patches(patch_path: Path) -> List[Tuple[Dict[str, Any], str]]:
     """
     Load one or more VibeSpec patches from a .vibe file.
     Returns a list of (metadata_dict, code_str) tuples.
+    Splits metadata at the next 'patch_type:' or '--- code:' marker.
+    """
+    text = patch_path.read_text()
+    lines = text.splitlines()
+    patches: List[Tuple[Dict[str, Any], str]] = []
+    i = 0
+    current_version: Optional[str] = None
+
+    while i < len(lines):
+        # Skip blank lines
+        if not lines[i].strip():
+            i += 1
+            continue
+
+        # Capture spec header
+        m = re.match(r'^#\s*VibeSpec:\s*(\d+\.\d+)', lines[i])
+        if m:
+            current_version = m.group(1)
+            i += 1
+            continue
+
+        # Begin a new patch
+        # 1) Gather metadata lines until we see either '--- code:' or another 'patch_type:'
+        meta_lines: List[str] = []
+        # Expect at least one 'patch_type:' line
+        if lines[i].startswith("patch_type:"):
+            meta_lines.append(lines[i])
+            i += 1
+        else:
+            # skip until a patch_type
+            while i < len(lines) and not lines[i].startswith("patch_type:"):
+                i += 1
+            if i < len(lines):
+                meta_lines.append(lines[i])
+                i += 1
+
+        # Now keep absorbing metadata until a code block or the next patch_type
+        while i < len(lines) and not lines[i].startswith("--- code:") and not lines[i].startswith("patch_type:") and lines[i].strip():
+            meta_lines.append(lines[i])
+            i += 1
+
+        # Parse metadata
+        meta: Dict[str, Any] = yaml.safe_load("\n".join(meta_lines)) or {}
+        if current_version:
+            meta["VibeSpec"] = current_version
+
+        # 2) If there's a code block, read it
+        code = ""
+        if i < len(lines) and lines[i].startswith("--- code:"):
+            i += 1
+            code_lines: List[str] = []
+            # literal lines are either indented or blank
+            while i < len(lines) and (lines[i].startswith((" ", "\t")) or not lines[i].strip()):
+                code_lines.append(lines[i])
+                i += 1
+            code = dedent("\n".join(code_lines)).rstrip("\n")
+
+        patches.append((meta, code))
+
+    return patches
+
+def old_load_patches(patch_path: Path) -> List[Tuple[Dict[str, Any], str]]:
+    """
+    Load one or more VibeSpec patches from a .vibe file.
+    Returns a list of (metadata_dict, code_str) tuples.
     """
     text = patch_path.read_text()
     lines = text.splitlines()
@@ -197,11 +262,11 @@ def load_patch(path: Path) -> Tuple[Dict[str, Any], str]:
         if missing:
             raise ValueError(f"Missing meta keys: {sorted(missing)}")
 
-        # Allow v1.0, v1.2, v1.3, v1.4, and batch spec 1.5
+        # Allow v1.0, v1.2, v1.3, v1.4, v1.5 and now v1.6
         vs = meta["VibeSpec"]
-        if vs not in ("1.0", "1.2", "1.3", "1.4", "1.5"):
-            raise ValueError(f"Unsupported VibeSpec version: {vs}")
-
+        if vs not in ("1.0", "1.2", "1.3", "1.4", "1.5", "1.6"):
+            raise ValueError(f"Unsupported VibeSpec version: '{vs}'")
+        
         pt = meta["patch_type"]
         allowed = {
             "add_function", "add_method", "add_class", "add_block", "replace_block",
@@ -245,7 +310,7 @@ def validate_spec(meta: Dict[str, Any]) -> None:
 
     # Allow v1.0, v1.2, v1.3, v1.4, and batch spec 1.5
     vs = meta["VibeSpec"]
-    if vs not in ("1.0", "1.2", "1.3", "1.4", "1.5"):
+    if vs not in ("1.0", "1.2", "1.3", "1.4", "1.5", "1.6"):
         raise ValueError(f"Unsupported VibeSpec version: '{vs}'")
 
     pt = meta["patch_type"]
@@ -371,7 +436,12 @@ def _replace_function(src: str, name: str, block: str) -> str:
     if not m:
         return _append_func_before_class(src, block)
     lines = src.splitlines(keepends=True)
+
+    # start at the def, but include any decorator lines immediately above
     start = src[:m.start()].count("\n")
+    # if the line(s) above are decorators, fold them into the replacement
+    while start > 0 and lines[start-1].lstrip().startswith("@"):
+        start -= 1
     indent = len(m.group(0)) - len(m.group(0).lstrip())
     end = start + 1
     while end < len(lines):
@@ -406,8 +476,13 @@ def _replace_class(src: str, cls: str, block: str) -> str:
 # ---------- method replace --------------------------------------------------
 
 def _replace_method(src: str, cls: str, meth: str, block: str) -> str:
+    """
+    Replace (or append) a method `meth` inside class `cls`, including any decorators.
+    """
     lines = src.splitlines(keepends=True)
-    cls_idx: Any = None
+
+    # 1) Find the class definition
+    cls_idx = None
     cls_indent = 0
     for i, ln in enumerate(lines):
         if re.match(rf"^\s*class\s+{re.escape(cls)}\b.*:", ln):
@@ -416,6 +491,8 @@ def _replace_method(src: str, cls: str, meth: str, block: str) -> str:
             break
     if cls_idx is None:
         raise ValueError(f"Class {cls} not found")
+
+    # 2) Determine class-body boundary
     end_idx = cls_idx + 1
     while end_idx < len(lines):
         ln = lines[end_idx]
@@ -423,26 +500,45 @@ def _replace_method(src: str, cls: str, meth: str, block: str) -> str:
         if ln.strip() and ws <= cls_indent:
             break
         end_idx += 1
-    indent = ' ' * (cls_indent + 4)
-    pat = re.compile(rf"^{re.escape(indent)}def\s+{re.escape(meth)}\s*\(")
-    meth_idx: Any = None
+
+    # 3) Locate existing method (if any)
+    indent_str = ' ' * (cls_indent + 4)
+    meth_pat = re.compile(rf"^{re.escape(indent_str)}@?")  # match decorator or method
+    meth_def = re.compile(rf"^{re.escape(indent_str)}def\s+{re.escape(meth)}\s*\(")
+    meth_idx = None
     for i in range(cls_idx+1, end_idx):
-        if pat.match(lines[i]):
+        if meth_def.match(lines[i]):
             meth_idx = i
             break
-    if not block.startswith(indent):
-        block = indent + block.rstrip().replace("\n", "\n" + indent)
+
+    # 4) Prepare new block (ensure proper indentation)
+    if not block.startswith(indent_str):
+        block = indent_str + block.rstrip().replace("\n", "\n" + indent_str)
+    # ensure leading newline if appending
     if meth_idx is None and lines[end_idx-1].strip():
         block = "\n" + block
+
+    # 5) If replacing, adjust start to include decorators
     if meth_idx is not None:
-        m_end = meth_idx + 1
+        # back up to include any decorator lines
+        start_idx = meth_idx
+        while start_idx > cls_idx and lines[start_idx-1].lstrip().startswith("@"):
+            start_idx -= 1
+
+        # find end of method (first line with indent <= method indent)
+        m_end = start_idx + 1
         while m_end < end_idx:
             ln = lines[m_end]
             ws = len(ln) - len(ln.lstrip())
-            if ln.strip() and ws <= len(indent):
+            if ln.strip() and ws <= len(indent_str):
                 break
             m_end += 1
-        return "".join(_replace_block(lines, meth_idx, m_end, block))
+
+        # replace the old block (decorators + def + body)
+        new_lines = lines[:start_idx] + [block + "\n\n"] + lines[m_end:end_idx] + lines[end_idx:]
+        return "".join(new_lines)
+
+    # 6) Otherwise, append the new method at end of class body
     return "".join(lines[:end_idx] + [block + "\n\n"] + lines[end_idx:])
 
 # =============================================================================
@@ -472,33 +568,87 @@ def _remove_between(src: str, start_pat: str, end_pat: str) -> str:
         out.append(ln)
     return "".join(out)
 
-
 def _remove_function(src: str, name: str) -> str:
     """
-    Remove a top‑level function named `name` (its entire def … body).
+    Remove a top‑level function named `name`, including its def line and any @decorators above.
     """
     import re
     lines = src.splitlines(keepends=True)
-    pat   = re.compile(rf"^(\s*)def\s+{re.escape(name)}\s*\(", re.MULTILINE)
-    m     = pat.search(src)
-    if not m:
+
+    # 1) Find the index of the `def name(` line
+    start = None
+    indent = 0
+    for idx, ln in enumerate(lines):
+        m = re.match(rf"^(\s*)def\s+{re.escape(name)}\s*\(", ln)
+        if m:
+            start = idx
+            indent = len(ln) - len(ln.lstrip())
+            break
+    if start is None:
+        # nothing to remove
         return src
 
-    indent = len(m.group(1))
-    # start at the line *after* the def – skip the header itself
-    start  = src[:m.start()].count("\n") + 1
-    end    = start + 1
+    # 2) Fold in any decorator lines immediately above
+    while start > 0 and lines[start-1].lstrip().startswith("@"):
+        start -= 1
 
-    # consume until we hit a line with indentation ≤ the function header
+    # 3) Scan forward to end of that function body
+    end = start + 1
     while end < len(lines):
         ln = lines[end]
         ws = len(ln) - len(ln.lstrip())
+        # break at the first non‑blank line with indent <= the function indent
         if ln.strip() and ws <= indent:
             break
         end += 1
 
-    # splice out [start:end]
+    # 4) Splice out lines[start:end]
     return "".join(lines[:start] + lines[end:])
+
+def _remove_method(src: str, cls: str, meth: str) -> str:
+    """
+    Remove a method `meth` inside class `cls`, including its def line and any @decorators above.
+    """
+    import re
+    lines = src.splitlines(keepends=True)
+
+    # find the class header
+    cls_pat = re.compile(rf"^(\s*)class\s+{re.escape(cls)}\b", re.MULTILINE)
+    mcls = cls_pat.search(src)
+    if not mcls:
+        return src
+
+    # compute the class body range
+    cls_indent = len(mcls.group(1))
+    start = src[:mcls.start()].count("\n") + 1
+    end = start + 1
+    while end < len(lines):
+        ln = lines[end]
+        ws = len(ln) - len(ln.lstrip())
+        if ln.strip() and ws <= cls_indent:
+            break
+        end += 1
+
+    # locate the method within the class slice
+    meth_pat = re.compile(rf"^(\s*)def\s+{re.escape(meth)}\s*\(")
+    for i in range(start, end):
+        if meth_pat.match(lines[i]):
+            # back up to include decorators
+            mstart = i
+            while mstart > start and lines[mstart-1].lstrip().startswith("@"):
+                mstart -= 1
+            # consume until indent <= method indent
+            indent = len(lines[i]) - len(lines[i].lstrip())
+            mend = mstart + 1
+            while mend < end:
+                ln = lines[mend]
+                ws = len(ln) - len(ln.lstrip())
+                if ln.strip() and ws <= indent:
+                    break
+                mend += 1
+            # splice out [mstart:mend)
+            return "".join(lines[:mstart] + lines[mend:])
+    return src
 
 def _remove_class(src: str, cls: str) -> str:
     """
@@ -524,54 +674,6 @@ def _remove_class(src: str, cls: str) -> str:
         end += 1
     return "".join(lines[:start] + lines[end:])
 
-
-def _remove_method(src: str, cls: str, meth: str) -> str:
-    """
-    Remove a method named `meth` inside class `cls`.
-    """
-    import re
-    lines = src.splitlines(keepends=True)
-
-    # Locate the class header
-    cls_pat = re.compile(rf"^(\s*)class\s+{re.escape(cls)}\b", re.MULTILINE)
-    mcls    = cls_pat.search(src)
-    if not mcls:
-        return src
-    cls_indent = len(mcls.group(1))
-
-    # Determine the start/end lines of the class body
-    start = src[:mcls.start()].count("\n") + 1
-    end   = start + 1
-    while end < len(lines):
-        ln = lines[end]
-        ws = len(ln) - len(ln.lstrip())
-        if ln.strip() and ws <= cls_indent:
-            break
-        end += 1
-
-    # Find the method within that slice
-    meth_pat = re.compile(rf"^(\s*)def\s+{re.escape(meth)}\s*\(")
-    for i in range(start, end):
-        mn = meth_pat.match(lines[i])
-        if not mn:
-            continue
-        indent = len(mn.group(1))
-        mstart = i
-        mend   = mstart + 1
-        # Swallow the method body
-        while mend < end:
-            ln = lines[mend]
-            ws = len(ln) - len(ln.lstrip())
-            if ln.strip() and ws <= indent:
-                break
-            mend += 1
-
-        # Splice out signature+body
-        return "".join(lines[:mstart] + lines[mend:end] + lines[end:])
-
-    return src
-
-
 # =============================================================================
 #  Apply patch
 # =============================================================================
@@ -590,6 +692,7 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
     block = dedent(code).rstrip("\n")
     lines = src.splitlines(keepends=True)
 
+    # helper to remove blocks by regex anchors or indent-sensitive
     def _remove_block(lines, start_re, end_re=None, indent_sensitive=False):
         new_lines = []
         skipping = False
@@ -621,7 +724,8 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
         return "".join(new_lines)
 
     if pt == "add_function":
-        m = re.match(r"def\s+(\w+)", block, re.MULTILINE)
+        # allow decorators before the `def`
+        m = re.search(r"^\s*def\s+(\w+)", block, re.MULTILINE)
         if not m:
             raise ValueError(f"Invalid add_function block, no function signature found in:\n{block}")
         name = m.group(1)
@@ -629,72 +733,73 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
 
     elif pt == "add_method":
         cls = meta.get("class", "")
-        m = re.match(r"def\s+(\w+)", block)
+        # allow decorators before the `def`
+        m = re.search(r"^\s*def\s+(\w+)", block, re.MULTILINE)
         if not m:
             raise ValueError(f"Invalid add_method block, no method signature found in:\n{block}")
         name = m.group(1)
         new_src = _replace_method(src, cls, name, block)
 
     elif pt == "add_class":
-        mcls = re.match(r"class\s+(\w+)", block)
+        # allow decorators before the `class`
+        mcls = re.search(r"^\s*class\s+(\w+)", block, re.MULTILINE)
         cls_name = mcls.group(1) if mcls else None
         if cls_name and re.search(rf"^\s*class\s+{re.escape(cls_name)}\b", src, re.MULTILINE):
             new_src = _replace_class(src, cls_name, block)
         else:
-            trimmed = src.rstrip("\n")
-            new_src = trimmed + "\n\n" + block + "\n"
+            new_src = src.rstrip("\n") + "\n\n" + block + "\n"
 
     elif pt == "add_block":
         pos = meta.get("position", "end")
         anchor = meta.get("anchor")
         if pos == "start":
-            new_src = block + "\n\n" + src
-        elif pos in ("before", "after") and anchor:
+            new_src = block.rstrip() + "\n\n" + src
+
+        elif pos in ("before", "after"):
+            if not anchor:
+                raise ValueError("add_block before/after requires an `anchor` regex")
             pat = re.compile(anchor)
             idx = next((i for i, ln in enumerate(lines) if pat.search(ln)), len(lines))
-            if pos == "after":
-                indent = len(lines[idx]) - len(lines[idx].lstrip())
+            if pos == "after" and idx < len(lines):
+                anchor_indent = len(lines[idx]) - len(lines[idx].lstrip())
                 j = idx + 1
                 while j < len(lines):
                     ln = lines[j]
                     ws = len(ln) - len(ln.lstrip())
-                    if ln.strip() and ws <= indent:
+                    if ln.strip() and ws <= anchor_indent:
                         break
                     j += 1
                 idx = j
-            if idx > 0 and lines[idx - 1].strip():
-                lines.insert(idx, "\n")
-                idx += 1
-            lines.insert(idx, block + "\n")
-            lines.insert(idx + 1, "\n")
+            if idx > 0 and lines[idx-1].strip():
+                lines.insert(idx, "\n"); idx += 1
+            lines.insert(idx, block.rstrip() + "\n")
+            lines.insert(idx+1, "\n")
             new_src = "".join(lines)
         else:
-            trimmed = src.rstrip("\n")
-            new_src = trimmed + "\n\n" + block + "\n"
+            new_src = src.rstrip("\n") + "\n\n" + block.rstrip() + "\n"
 
     elif pt == "remove_block":
         start_re = re.compile(meta["anchor_start"])
-        end_re = re.compile(meta["anchor_end"])
+        end_re   = re.compile(meta["anchor_end"])
         new_src = _remove_block(lines, start_re, end_re)
 
     elif pt == "remove_function":
-        func_name = meta["name"]
-        start_re = re.compile(rf"^def {re.escape(func_name)}\b")
-        new_src = _remove_block(lines, start_re)
+        # now uses the decorator‑aware helper
+        name    = meta["name"]
+        new_src = _remove_function(src, name)
 
     elif pt == "remove_method":
-        meth_name = meta["name"]
-        start_re = re.compile(rf"^[ \t]*def {re.escape(meth_name)}\b")
-        new_src = _remove_block(lines, start_re, indent_sensitive=True)
-
+        # now uses the decorator‑aware helper
+        cls     = meta.get("class", "")
+        name    = meta["name"]
+        new_src = _remove_method(src, cls, name)
+        
     elif pt == "remove_class":
         cls_rm = meta["name"]
-        start_re = re.compile(rf"^class {re.escape(cls_rm)}\b")
-        new_src = _remove_block(lines, start_re)
+        new_src = _remove_class(src, cls_rm)
 
     else:
-        trimmed = src.rstrip("\n")
-        new_src = trimmed + "\n\n" + block + "\n"
+        new_src = src.rstrip("\n") + "\n\n" + block + "\n"
 
     if dry:
         print(new_src)

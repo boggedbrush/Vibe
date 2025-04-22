@@ -1,0 +1,23 @@
+@log_enter_exit
+@timer()
+def foo(x):
+    # updated logic: double the input
+    return x * 2
+
+@benchmark
+def new_feature(z):
+    return z + 42
+
+class MyClass:
+    
+    @classmethod
+    @validate
+    def compute(cls, value):
+        # optimized compute: cube the input
+        return value ** 3
+
+    @staticmethod
+    @cache_result
+    def new_method(a, b):
+        return a + b
+

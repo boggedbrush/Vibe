@@ -4,293 +4,104 @@
   <meta charset="UTF-8" />
   <title>Vibe Patch Diff UI</title>
   <style>
-    html, body {
-      margin: 0;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      /* reserve space for the fixed patch strip */
-      padding-bottom: 150px;
-    }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
     #toolbar {
-      padding: 8px;
-      background: #f3f3f3;
-      border-bottom: 1px solid #ccc;
-      display: flex;
-      align-items: center;
+      padding: 8px; background: #f3f3f3; border-bottom: 1px solid #ccc;
     }
     #toolbar button { margin-right: 6px; }
-
-    #diffContainer {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: auto;
-    }
-    #diffHeader {
-      display: flex;
-      justify-content: space-between;
-      padding: 4px 8px;
-      background: #f0f0f0;
-      border-bottom: 1px solid #ddd;
-      font-weight: bold;
-      font-family: sans-serif;
-    }
-    #diff { flex: 1; }
-
-    /* FIXED patch strip at bottom */
-    #patchStripContainer {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 150px;
-      border-top: 1px solid #ccc;
-      display: flex;
-      flex-direction: column;
-      background: #fafafa;
-      z-index: 100;
-    }
-    #patchStrip {
-      flex: 1;
-      width: 100%;
-      font-family: monospace;
-      font-size: 0.9em;
-      padding: 8px;
-      box-sizing: border-box;
-      border: none;
-      resize: none;
-    }
-    #patchControls {
-      padding: 4px 8px;
-      background: #fafafa;
-      border-top: 1px solid #ddd;
-      text-align: right;
-    }
-    #patchControls button { margin-left: 6px; }
+    #diff { height: calc(100% - 42px); }
   </style>
-  <script src="/static/monaco/min/vs/loader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs/loader.js"></script>
 </head>
 <body>
   <div id="toolbar">
     <button id="loadFileBtn">Load File</button>
+    <button id="loadPatchBtn" disabled>Load Patch</button>
+    <button id="acceptBtn" disabled>Accept</button>
     <input type="file" id="fileInput1" accept=".py" style="display:none">
-    <button id="loadPatchFileBtn">Load Patch File</button>
-    <input type="file" id="patchFileInput" accept=".vibe,.txt" style="display:none">
-    <button id="prevBtn" disabled>« Previous</button>
-    <button id="nextBtn" disabled>Next »</button>
-    <button id="acceptStripBtn" disabled>Accept Changes</button>
+    <input type="file" id="fileInput2" accept=".vibe,.txt" style="display:none">
   </div>
-
-  <div id="diffContainer">
-    <div id="diffHeader">
-      <span id="origFilenameLabel"></span>
-      <span id="versionFilenameLabel"></span>
-    </div>
-    <div id="diff"></div>
-  </div>
-
-  <div id="patchStripContainer">
-    <textarea id="patchStrip" placeholder="Paste your .vibe patch here…"></textarea>
-    <div id="patchControls">
-      <button id="applyStripBtn" disabled>Save Patch</button>
-      <button id="updateBtn" disabled>Update Diff</button>
-    </div>
-  </div>
+  <div id="diff"></div>
 
   <script>
-    require.config({ paths: { vs: '/static/monaco/min/vs' }});
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs' }});
     require(['vs/editor/editor.main'], () => {
       const diffEditor = monaco.editor.createDiffEditor(
         document.getElementById('diff'),
         { readOnly: true, renderSideBySide: true }
       );
 
-      // Elements
-      const loadFileBtn = document.getElementById('loadFileBtn');
-      const fileInput1 = document.getElementById('fileInput1');
-      const loadPatchFileBtn = document.getElementById('loadPatchFileBtn');
-      const patchFileInput = document.getElementById('patchFileInput');
-      const prevBtn = document.getElementById('prevBtn');
-      const nextBtn = document.getElementById('nextBtn');
-      const acceptStripBtn = document.getElementById('acceptStripBtn');
-      const patchStrip = document.getElementById('patchStrip');
-      const patchStripContainer = document.getElementById('patchStripContainer');
-      const origFilenameLabel = document.getElementById('origFilenameLabel');
-      const versionFilenameLabel = document.getElementById('versionFilenameLabel');
-      const applyStripBtn = document.getElementById('applyStripBtn');
-      const updateBtn = document.getElementById('updateBtn');
+      const loadFileBtn  = document.getElementById('loadFileBtn');
+      const loadPatchBtn = document.getElementById('loadPatchBtn');
+      const acceptBtn    = document.getElementById('acceptBtn');
+      const fileInput1   = document.getElementById('fileInput1');
+      const fileInput2   = document.getElementById('fileInput2');
 
-      let origText = '';
-      let patchText = '';
+      let origText    = '';
+      let patchText   = '';
       let patchedText = '';
       let currentFile = '';
-      let versions = [];
-      let currentIndex = -1;
 
-      function updateAcceptButton() {
-        const model = diffEditor.getModel();
-        if (!model) return;
-        acceptStripBtn.disabled = model.original.getValue() === model.modified.getValue();
-      }
+      // Step 1: Load the Python file
+      loadFileBtn.onclick = () => fileInput1.click();
+      fileInput1.onchange = async e => {
+        const f = e.target.files[0];
+        if (!f) return;
+        origText = await f.text();
+        currentFile = f.name;
+        const model = monaco.editor.createModel(origText, 'python');
+        diffEditor.setModel({ original: model, modified: model });
+        loadPatchBtn.disabled = false;
+        acceptBtn.disabled    = true;
+      };
 
-      function setHeaders(orig, ver) {
-        origFilenameLabel.textContent = orig;
-        versionFilenameLabel.textContent = ver;
-      }
+      // Step 2: Load the patch and preview
+      loadPatchBtn.onclick = () => fileInput2.click();
+      fileInput2.onchange = async e => {
+        const f = e.target.files[0];
+        if (!f) return alert('Please select a .vibe patch file.');
+        patchText = await f.text();
 
-      async function goToHead() {
-        patchedText = origText;
-        const headModel = monaco.editor.createModel(origText, 'python');
-        diffEditor.setModel({ original: headModel, modified: headModel });
-        setHeaders(currentFile, `${currentFile} (head)`);
-        currentIndex = -1;
-        prevBtn.disabled = versions.length === 0;
-        nextBtn.disabled = true;
-        updateAcceptButton();
-      }
-
-      async function loadVersions() {
-        const resp = await fetch(`/versions?file=${encodeURIComponent(currentFile)}`);
-        versions = await resp.json();
-        currentIndex = -1;
-        prevBtn.disabled = versions.length === 0;
-        nextBtn.disabled = true;
-        await goToHead();
-      }
-
-      async function previewPatch() {
-        if (!currentFile) return;
-        const origModel = monaco.editor.createModel(origText, 'python');
-        diffEditor.setModel({ original: origModel, modified: origModel });
-        updateBtn.disabled = true;
-        updateAcceptButton();
-
-        if (!patchText.trim()) return;
         const resp = await fetch('/apply', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ patch: patchText })
         });
         if (!resp.ok) {
-          alert('Patch failed: ' + resp.statusText);
+          alert('Apply failed: ' + resp.statusText);
           return;
         }
 
         const results = await resp.json();
         patchedText = results[currentFile] || results[Object.keys(results)[0]];
-        const modModel = monaco.editor.createModel(patchedText, 'python');
+        if (patchedText === undefined) {
+          alert(`No patched output for "${currentFile}".`);
+          return;
+        }
+
+        const origModel = monaco.editor.createModel(origText, 'python');
+        const modModel  = monaco.editor.createModel(patchedText, 'python');
         diffEditor.setModel({ original: origModel, modified: modModel });
-        setHeaders(currentFile, `${currentFile} (preview)`);
-        updateAcceptButton();
-      }
+        acceptBtn.disabled = false;
+      };
 
-      function onPatchInput() {
-        patchText = patchStrip.value;
-        applyStripBtn.disabled = !patchText.trim();
-        updateBtn.disabled = !patchText.trim();
-      }
-
-      async function commitChanges() {
-        if (!currentFile) return;
-        const resp = await fetch('/accept_changes', {
+      // Step 3: Accept = save
+      acceptBtn.onclick = async () => {
+        const resp = await fetch('/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ file: currentFile, text: patchedText })
+          body: JSON.stringify({ patch: patchText })
         });
         if (!resp.ok) {
-          const err = await resp.json().catch(() => null);
-          alert('Save failed: ' + (err?.error || resp.statusText));
+          alert('Save failed: ' + resp.statusText);
           return;
         }
         origText = patchedText;
-        patchStrip.value = '';
-        patchText = '';
-        applyStripBtn.disabled = true;
-        updateBtn.disabled = true;
-        acceptStripBtn.disabled = true;
-        // reload versions to include new backup
-        await loadVersions();
-      }
-
-      loadFileBtn.onclick = () => fileInput1.click();
-      fileInput1.onchange = async e => {
-        const f = e.target.files[0]; if (!f) return;
-        origText = await f.text();
-        currentFile = f.name;
-        const headModel = monaco.editor.createModel(origText, 'python');
-        diffEditor.setModel({ original: headModel, modified: headModel });
-        await loadVersions();
-        patchStrip.value = '';
-        patchText = '';
-        applyStripBtn.disabled = true;
-        updateBtn.disabled = true;
+        acceptBtn.disabled = true;
+        loadPatchBtn.disabled = true;
+        const model = monaco.editor.createModel(origText, 'python');
+        diffEditor.setModel({ original: model, modified: model });
       };
-
-      prevBtn.onclick = async () => {
-        if (currentIndex + 1 < versions.length) {
-          currentIndex++;
-          const { sha } = versions[currentIndex];
-          const versionText = await fetch(
-            `/version?file=${encodeURIComponent(currentFile)}&sha=${sha}`
-          ).then(r => r.text());
-          patchedText = versionText;
-          const origModel = monaco.editor.createModel(origText, 'python');
-          const verModel = monaco.editor.createModel(versionText, 'python');
-          diffEditor.setModel({ original: origModel, modified: verModel });
-          setHeaders(currentFile, `${currentFile} @ ${sha}`);
-          updateAcceptButton();
-          nextBtn.disabled = false;
-          prevBtn.disabled = currentIndex + 1 === versions.length;
-        }
-      };
-
-      nextBtn.onclick = async () => {
-        if (currentIndex > 0) {
-          currentIndex--;
-          const { sha } = versions[currentIndex];
-          const versionText = await fetch(
-            `/version?file=${encodeURIComponent(currentFile)}&sha=${sha}`
-          ).then(r => r.text());
-          patchedText = versionText;
-          const origModel = monaco.editor.createModel(origText, 'python');
-          const verModel = monaco.editor.createModel(versionText, 'python');
-          diffEditor.setModel({ original: origModel, modified: verModel });
-          setHeaders(currentFile, `${currentFile} @ ${sha}`);
-          updateAcceptButton();
-          prevBtn.disabled = false;
-          nextBtn.disabled = currentIndex === 0;
-        } else {
-          await goToHead();
-        }
-      };
-
-      loadPatchFileBtn.onclick = () => patchFileInput.click();
-      patchFileInput.onchange = async e => {
-        const f = e.target.files[0];
-        if (!f) return;
-        patchText = await f.text();
-        patchStrip.value = patchText;
-        onPatchInput();
-        previewPatch();
-      };
-
-      patchStrip.addEventListener('paste', () => {
-        patchStrip.value = '';
-        onPatchInput();
-        previewPatch();
-      });
-      patchStrip.addEventListener('input', () => onPatchInput());
-
-      applyStripBtn.onclick = () => fetch('/save', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patch: patchText })
-      })
-      .then(res => res.ok ? previewPatch() : res.json().then(err => alert('Save failed: ' + (err.error || res.statusText))));
-
-      updateBtn.onclick = previewPatch;
-      acceptStripBtn.onclick = commitChanges;
     });
   </script>
 </body>

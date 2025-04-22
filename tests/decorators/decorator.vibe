@@ -1,0 +1,53 @@
+# VibeSpec: 1.6
+
+# 1) Replace decorated function `foo` in hello.py
+patch_type: add_function
+file: hello.py
+name: foo
+--- code: |
+    @log_enter_exit
+    @timer()
+    def foo(x):
+        # updated logic: double the input
+        return x * 2
+
+# 2) Remove decorated function `bar` in hello.py
+patch_type: remove_function
+file: hello.py
+name: bar
+
+# 3) Replace decorated method `compute` in class `MyClass`
+patch_type: add_method
+file: hello.py
+class: MyClass
+name: compute
+--- code: |
+    @classmethod
+    @validate
+    def compute(cls, value):
+        # optimized compute: cube the input
+        return value ** 3
+
+# 4) Remove decorated method `old_method` in class `MyClass`
+patch_type: remove_method
+file: hello.py
+class: MyClass
+name: old_method
+
+# 5) Add a new decorated function to ensure add_function handles decorators
+patch_type: add_function
+file: hello.py
+--- code: |
+    @benchmark
+    def new_feature(z):
+        return z + 42
+
+# 6) Add a new decorated method to ensure add_method handles decorators
+patch_type: add_method
+file: hello.py
+class: MyClass
+--- code: |
+    @staticmethod
+    @cache_result
+    def new_method(a, b):
+        return a + b

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import difflib
 import sys
 import os
 from pathlib import Path
@@ -13,6 +14,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import vibe_cli
 
 TESTS_DIR = Path(__file__).parent
+
+def show_difference(str1, str2):
+    """Prints the differences between two strings."""
+    diff = difflib.unified_diff(str1.splitlines(keepends=True), str2.splitlines(keepends=True))
+    return ''.join(diff)
 
 def run_case(case_dir: Path):
     patch_paths = list(case_dir.glob("*.vibe"))
@@ -51,6 +57,7 @@ def run_case(case_dir: Path):
         return True
     else:
         print(f"[FAIL] {case_dir.name} – Output does not match .expected")
+        print(show_difference(got, exp))
         print("\nOriginal code\n```python")
         print(hello_src.rstrip("\n"))
         print("```\n")
@@ -63,6 +70,21 @@ def run_case(case_dir: Path):
         print("Got\n```python")
         print(got.rstrip("\n"))
         print("```\n")
+        # Compute and print a unified diff
+        print("Unified diff (expected → got):")
+        diff = difflib.unified_diff(
+            exp.splitlines(keepends=True),
+            got.splitlines(keepends=True),
+            fromfile="expected",
+            tofile="got",
+            lineterm=""
+        )
+        for line in diff:
+            # colorize removals/additions if you like, or just raw
+            line = line.replace(' ', '_')
+            print(line.strip())
+
+        print()  # final newline        
         return False
 
 def main():
