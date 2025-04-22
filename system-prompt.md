@@ -53,7 +53,7 @@ file: hello.py
 ### add_function_replace
 ```yaml
 # VibeSpec: 1.4
-patch_type: replace_function
+patch_type: add_function
 file: hello.py
 --- code: |
     def greet(name):
@@ -74,7 +74,7 @@ class: Greeter
 ### add_method_replace
 ```yaml
 # VibeSpec: 1.4
-patch_type: replace_method
+patch_type: add_method
 file: hello.py
 class: Greeter
 --- code: |
@@ -96,7 +96,6 @@ file: hello.py
 ### add_class_replace
 ```yaml
 # VibeSpec: 1.4
-patch_type: replace_class
 file: hello.py
 --- code: |
     class Greeter:
