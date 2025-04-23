@@ -28,8 +28,8 @@ parser.add_argument(
 parser.add_argument(
     "--port",
     type=int,
-    default=8000,
-    help="Port to listen on (default: 8000)"
+    default=8088,
+    help="Port to listen on (default: 8088)"
 )
 args = parser.parse_args()
 BASE_DIR = Path(args.baseDir).resolve()
@@ -204,6 +204,16 @@ def accept_changes():
     # Overwrite with new content
     target.write_text(new_text)
     return "", 204
+
+@app.route('/file')
+def get_file():
+    file = request.args.get('file')
+    if not file:
+        return 'Missing file param', 400
+    p = BASE_DIR / file
+    if not p.exists():
+        return 'Not found', 404
+    return Response(p.read_text(), mimetype='text/plain')
 
 # -----------------------------------------------------------------------------
 #  Entry point

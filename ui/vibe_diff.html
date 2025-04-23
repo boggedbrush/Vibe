@@ -5,11 +5,12 @@
   <title>Vibe Patch Diff UI</title>
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; }
-    #toolbar {
-      padding: 8px; background: #f3f3f3; border-bottom: 1px solid #ccc;
-    }
-    #toolbar button { margin-right: 6px; }
-    #diff { height: calc(100% - 42px); }
+    body        { display: flex; flex-direction: column; }
+    #toolbar    { display: flex; align-items: center; gap: 6px; padding: 8px; background: #f3b3b3; border-bottom: 1px solid #ccc; }
+    #versionDisplay { margin-left: auto; font-style: italic; }
+    #diff           { flex: 1 1 auto; overflow: hidden; }
+    #patchContainer { flex: 0 0 150px; border-top: 1px solid #ccc; }
+    #patchArea      { width: 100%; height: 100%; box-sizing: border-box; font-family: monospace; padding: 8px; border: none; resize: none; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs/loader.js"></script>
 </head>
@@ -18,89 +19,191 @@
     <button id="loadFileBtn">Load File</button>
     <button id="loadPatchBtn" disabled>Load Patch</button>
     <button id="acceptBtn" disabled>Accept</button>
-    <input type="file" id="fileInput1" accept=".py" style="display:none">
-    <input type="file" id="fileInput2" accept=".vibe,.txt" style="display:none">
+    <button id="prevBtn" disabled>Previous</button>
+    <button id="nextBtn" disabled>Next</button>
+    <div id="versionDisplay">Head</div>
+    <input type="file" id="fileInput1" accept=".py"  style="display:none" />
+    <input type="file" id="fileInput2" accept=".vibe,.txt" style="display:none" />
   </div>
   <div id="diff"></div>
+  <div id="patchContainer">
+    <textarea id="patchArea" placeholder="Paste your .vibe patch here..."></textarea>
+  </div>
 
   <script>
     require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs' }});
     require(['vs/editor/editor.main'], () => {
+      //------------------------------------------------------------------
+      // DOM refs & Monaco diff
+      //------------------------------------------------------------------
       const diffEditor = monaco.editor.createDiffEditor(
-        document.getElementById('diff'),
-        { readOnly: true, renderSideBySide: true }
+        document.getElementById('diff'), { readOnly: true, renderSideBySide: true }
       );
+      const loadFileBtn    = document.getElementById('loadFileBtn');
+      const loadPatchBtn   = document.getElementById('loadPatchBtn');
+      const acceptBtn      = document.getElementById('acceptBtn');
+      const prevBtn        = document.getElementById('prevBtn');
+      const nextBtn        = document.getElementById('nextBtn');
+      const versionDisplay = document.getElementById('versionDisplay');
+      const fileInput1     = document.getElementById('fileInput1');
+      const fileInput2     = document.getElementById('fileInput2');
+      const patchArea      = document.getElementById('patchArea');
 
-      const loadFileBtn  = document.getElementById('loadFileBtn');
-      const loadPatchBtn = document.getElementById('loadPatchBtn');
-      const acceptBtn    = document.getElementById('acceptBtn');
-      const fileInput1   = document.getElementById('fileInput1');
-      const fileInput2   = document.getElementById('fileInput2');
+      //------------------------------------------------------------------
+      // State
+      //------------------------------------------------------------------
+      let headText     = '';   // current on‑disk file (HEAD)
+      let compareText  = '';   // what the right panel is showing
+      let patchText    = '';
+      let currentFile  = '';
+      let versions     = [];   // ascending list of backups
+      let versionIndex = 0;    // 0 … versions.length == HEAD slot
+      let previewActive = false; // true when previewing a .vibe patch
 
-      let origText    = '';
-      let patchText   = '';
-      let patchedText = '';
-      let currentFile = '';
+      //------------------------------------------------------------------
+      // Helpers
+      //------------------------------------------------------------------
+      function setDiff(original, modified) {
+        diffEditor.setModel({
+          original: monaco.editor.createModel(original, 'python'),
+          modified: monaco.editor.createModel(modified,  'python')
+        });
+      }
 
-      // Step 1: Load the Python file
-      loadFileBtn.onclick = () => fileInput1.click();
-      fileInput1.onchange = async e => {
-        const f = e.target.files[0];
-        if (!f) return;
-        origText = await f.text();
-        currentFile = f.name;
-        const model = monaco.editor.createModel(origText, 'python');
-        diffEditor.setModel({ original: model, modified: model });
-        loadPatchBtn.disabled = false;
-        acceptBtn.disabled    = true;
-      };
+      function updateNav() {
+        prevBtn.disabled = !(previewActive || versionIndex > 0);
+        nextBtn.disabled = !( !previewActive && versionIndex < versions.length );
 
-      // Step 2: Load the patch and preview
-      loadPatchBtn.onclick = () => fileInput2.click();
-      fileInput2.onchange = async e => {
-        const f = e.target.files[0];
-        if (!f) return alert('Please select a .vibe patch file.');
-        patchText = await f.text();
+        if (previewActive)      versionDisplay.textContent = 'Preview';
+        else if (versionIndex === versions.length) versionDisplay.textContent = 'Head';
+        else                 versionDisplay.textContent = versions[versionIndex]?.sha || 'Head';
 
+        acceptBtn.disabled = (compareText === headText);
+      }
+
+      async function fetchVersions() {
+        try {
+          const resp = await fetch(`/versions?file=${encodeURIComponent(currentFile)}`);
+          if (!resp.ok) throw new Error(resp.statusText);
+          versions = await resp.json();
+        } catch (err) {
+          console.error('fetchVersions:', err);
+          versions = [];
+        }
+        versionIndex = versions.length; // logical HEAD
+        updateNav();
+      }
+
+      async function loadHead() {
+        const resp = await fetch(`/file?file=${encodeURIComponent(currentFile)}`);
+        if (!resp.ok) return alert('Failed to load current file: ' + resp.statusText);
+        headText    = await resp.text();
+        compareText = headText;
+        setDiff(headText, headText);
+        versionIndex   = versions.length; // HEAD
+        previewActive  = false;
+        updateNav();
+      }
+
+      async function loadVersion(idx) {
+        if (idx === versions.length) {
+          return loadHead();
+        }
+        const sha  = versions[idx].sha;
+        const resp = await fetch(`/version?file=${encodeURIComponent(currentFile)}&sha=${encodeURIComponent(sha)}`);
+        if (!resp.ok) return alert('Failed to load version: ' + resp.statusText);
+        compareText = await resp.text();
+        setDiff(headText, compareText);
+        versionIndex   = idx;
+        previewActive  = false;
+        updateNav();
+      }
+
+      async function previewPatch() {
         const resp = await fetch('/apply', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ patch: patchText })
         });
-        if (!resp.ok) {
-          alert('Apply failed: ' + resp.statusText);
-          return;
-        }
+        if (!resp.ok) return alert('Apply failed: ' + resp.statusText);
+        const result     = await resp.json();
+        compareText      = result[currentFile] || result[Object.keys(result)[0]];
+        setDiff(headText, compareText);
+        previewActive    = true;
+        updateNav();
+      }
 
-        const results = await resp.json();
-        patchedText = results[currentFile] || results[Object.keys(results)[0]];
-        if (patchedText === undefined) {
-          alert(`No patched output for "${currentFile}".`);
-          return;
-        }
-
-        const origModel = monaco.editor.createModel(origText, 'python');
-        const modModel  = monaco.editor.createModel(patchedText, 'python');
-        diffEditor.setModel({ original: origModel, modified: modModel });
-        acceptBtn.disabled = false;
+      //------------------------------------------------------------------
+      // UI bindings
+      //------------------------------------------------------------------
+      loadFileBtn.onclick = () => fileInput1.click();
+      fileInput1.onchange = async e => {
+        const f = e.target.files[0];
+        if (!f) return;
+        headText    = await f.text();
+        compareText = headText;
+        currentFile = f.name;
+        setDiff(headText, headText);
+        loadPatchBtn.disabled = false;
+        await fetchVersions();
       };
 
-      // Step 3: Accept = save
-      acceptBtn.onclick = async () => {
-        const resp = await fetch('/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ patch: patchText })
-        });
-        if (!resp.ok) {
-          alert('Save failed: ' + resp.statusText);
-          return;
+      loadPatchBtn.onclick = () => fileInput2.click();
+      fileInput2.onchange = async e => {
+        const f = e.target.files[0];
+        if (!f) return;
+        patchText       = await f.text();
+        patchArea.value = patchText;
+        await previewPatch();
+      };
+
+      patchArea.addEventListener('input', async () => {
+        patchText = patchArea.value;
+        if (patchText.trim()) {
+          await previewPatch();
         }
-        origText = patchedText;
-        acceptBtn.disabled = true;
-        loadPatchBtn.disabled = true;
-        const model = monaco.editor.createModel(origText, 'python');
-        diffEditor.setModel({ original: model, modified: model });
+      });
+
+      prevBtn.onclick = () => {
+        if (previewActive) {
+          // Cancel preview → back to HEAD diff
+          patchArea.value = '';
+          patchText       = '';
+          previewActive   = false;
+          compareText     = headText;
+          setDiff(headText, headText);
+          updateNav();
+        } else if (versionIndex > 0) {
+          loadVersion(versionIndex - 1);
+        }
+      };
+
+      nextBtn.onclick = () => {
+        if (!previewActive && versionIndex < versions.length) {
+          loadVersion(versionIndex + 1);
+        }
+      };
+
+      acceptBtn.onclick = async () => {
+        try {
+          const rightContent = diffEditor.getModifiedEditor().getModel().getValue();
+          await fetch('/accept_changes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file: currentFile, text: rightContent })
+          });
+
+          // New HEAD becomes what we just saved
+          headText     = rightContent;
+          compareText  = headText;
+          patchArea.value = patchText = '';
+          previewActive = false;
+          setDiff(headText, headText);
+
+          await fetchVersions();
+        } catch (err) {
+          alert('Accept failed: ' + err.message);
+        }
       };
     });
   </script>
