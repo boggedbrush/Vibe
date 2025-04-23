@@ -6,11 +6,20 @@
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; }
     body        { display: flex; flex-direction: column; }
-    #toolbar    { display: flex; align-items: center; gap: 6px; padding: 8px; background: #f3b3b3; border-bottom: 1px solid #ccc; }
+    #toolbar    { display: flex; align-items: center; gap: 6px; padding: 8px; background: #add8e6; border-bottom: 1px solid #ccc; }
     #versionDisplay { margin-left: auto; font-style: italic; }
-    #diff           { flex: 1 1 auto; overflow: hidden; }
-    #patchContainer { flex: 0 0 150px; border-top: 1px solid #ccc; }
-    #patchArea      { width: 100%; height: 100%; box-sizing: border-box; font-family: monospace; padding: 8px; border: none; resize: none; }
+
+    /* main area: diff + dragH + patchContainer */
+    #main          { flex: 1 1 auto; display:flex; flex-direction:column; overflow:hidden; }
+    #diff          { flex: 1 1 auto; overflow:hidden; }
+    #dragH         { flex: 0 0 5px; background:#ccc; cursor:row-resize; }
+
+    /* patch area row */
+    #patchContainer { flex: 0 0 150px; display:flex; border-top:1px solid #ccc; }
+    #patchBtns      { flex: 0 0 100px; display:flex; flex-direction:column; gap:4px; padding:4px; box-sizing:border-box; background:#f4f4f4; }
+    #patchBtns button{ width:100%; height:32px; cursor:pointer; }
+    #dragV          { flex:0 0 4px; background:#ccc; cursor:col-resize; }
+    #patchArea      { flex:1 1 auto; width:100%; height:100%; box-sizing:border-box; font-family: monospace; padding: 8px; border:none; resize:none; }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs/loader.js"></script>
 </head>
@@ -25,186 +34,135 @@
     <input type="file" id="fileInput1" accept=".py"  style="display:none" />
     <input type="file" id="fileInput2" accept=".vibe,.txt" style="display:none" />
   </div>
-  <div id="diff"></div>
-  <div id="patchContainer">
-    <textarea id="patchArea" placeholder="Paste your .vibe patch here..."></textarea>
+
+  <div id="main">
+    <div id="diff"></div>
+    <div id="dragH"></div>
+    <div id="patchContainer">
+      <div id="patchBtns">
+        <button id="clearPatchBtn"  title="Clear patch">Clear</button>
+        <button id="applyPatchBtn"  title="Preview patch" disabled>Apply</button>
+      </div>
+      <div id="dragV"></div>
+      <textarea id="patchArea" placeholder="Paste your .vibe patch here..."></textarea>
+    </div>
   </div>
 
   <script>
     require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs' }});
     require(['vs/editor/editor.main'], () => {
       //------------------------------------------------------------------
-      // DOM refs & Monaco diff
+      // DOM refs
       //------------------------------------------------------------------
-      const diffEditor = monaco.editor.createDiffEditor(
-        document.getElementById('diff'), { readOnly: true, renderSideBySide: true }
-      );
-      const loadFileBtn    = document.getElementById('loadFileBtn');
-      const loadPatchBtn   = document.getElementById('loadPatchBtn');
-      const acceptBtn      = document.getElementById('acceptBtn');
-      const prevBtn        = document.getElementById('prevBtn');
-      const nextBtn        = document.getElementById('nextBtn');
-      const versionDisplay = document.getElementById('versionDisplay');
-      const fileInput1     = document.getElementById('fileInput1');
-      const fileInput2     = document.getElementById('fileInput2');
-      const patchArea      = document.getElementById('patchArea');
-
-      //------------------------------------------------------------------
-      // State
-      //------------------------------------------------------------------
-      let headText     = '';   // current on‑disk file (HEAD)
-      let compareText  = '';   // what the right panel is showing
-      let patchText    = '';
-      let currentFile  = '';
-      let versions     = [];   // ascending list of backups
-      let versionIndex = 0;    // 0 … versions.length == HEAD slot
-      let previewActive = false; // true when previewing a .vibe patch
-
-      //------------------------------------------------------------------
-      // Helpers
-      //------------------------------------------------------------------
-      function setDiff(original, modified) {
-        diffEditor.setModel({
-          original: monaco.editor.createModel(original, 'python'),
-          modified: monaco.editor.createModel(modified,  'python')
-        });
-      }
-
-      function updateNav() {
-        prevBtn.disabled = !(previewActive || versionIndex > 0);
-        nextBtn.disabled = !( !previewActive && versionIndex < versions.length );
-
-        if (previewActive)      versionDisplay.textContent = 'Preview';
-        else if (versionIndex === versions.length) versionDisplay.textContent = 'Head';
-        else                 versionDisplay.textContent = versions[versionIndex]?.sha || 'Head';
-
-        acceptBtn.disabled = (compareText === headText);
-      }
-
-      async function fetchVersions() {
-        try {
-          const resp = await fetch(`/versions?file=${encodeURIComponent(currentFile)}`);
-          if (!resp.ok) throw new Error(resp.statusText);
-          versions = await resp.json();
-        } catch (err) {
-          console.error('fetchVersions:', err);
-          versions = [];
-        }
-        versionIndex = versions.length; // logical HEAD
-        updateNav();
-      }
-
-      async function loadHead() {
-        const resp = await fetch(`/file?file=${encodeURIComponent(currentFile)}`);
-        if (!resp.ok) return alert('Failed to load current file: ' + resp.statusText);
-        headText    = await resp.text();
-        compareText = headText;
-        setDiff(headText, headText);
-        versionIndex   = versions.length; // HEAD
-        previewActive  = false;
-        updateNav();
-      }
-
-      async function loadVersion(idx) {
-        if (idx === versions.length) {
-          return loadHead();
-        }
-        const sha  = versions[idx].sha;
-        const resp = await fetch(`/version?file=${encodeURIComponent(currentFile)}&sha=${encodeURIComponent(sha)}`);
-        if (!resp.ok) return alert('Failed to load version: ' + resp.statusText);
-        compareText = await resp.text();
-        setDiff(headText, compareText);
-        versionIndex   = idx;
-        previewActive  = false;
-        updateNav();
-      }
-
-      async function previewPatch() {
-        const resp = await fetch('/apply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ patch: patchText })
-        });
-        if (!resp.ok) return alert('Apply failed: ' + resp.statusText);
-        const result     = await resp.json();
-        compareText      = result[currentFile] || result[Object.keys(result)[0]];
-        setDiff(headText, compareText);
-        previewActive    = true;
-        updateNav();
-      }
-
-      //------------------------------------------------------------------
-      // UI bindings
-      //------------------------------------------------------------------
-      loadFileBtn.onclick = () => fileInput1.click();
-      fileInput1.onchange = async e => {
-        const f = e.target.files[0];
-        if (!f) return;
-        headText    = await f.text();
-        compareText = headText;
-        currentFile = f.name;
-        setDiff(headText, headText);
-        loadPatchBtn.disabled = false;
-        await fetchVersions();
-      };
-
-      loadPatchBtn.onclick = () => fileInput2.click();
-      fileInput2.onchange = async e => {
-        const f = e.target.files[0];
-        if (!f) return;
-        patchText       = await f.text();
-        patchArea.value = patchText;
-        await previewPatch();
-      };
-
-      patchArea.addEventListener('input', async () => {
-        patchText = patchArea.value;
-        if (patchText.trim()) {
-          await previewPatch();
-        }
+      const qs = id => document.getElementById(id);
+      const diffDom = qs('diff');
+      const diffEditor = monaco.editor.createDiffEditor(diffDom, {
+        readOnly: true,
+        renderSideBySide: true,
+        enableSplitViewResizing: true  // vertical divider inside Monaco is draggable
       });
 
-      prevBtn.onclick = () => {
-        if (previewActive) {
-          // Cancel preview → back to HEAD diff
-          patchArea.value = '';
-          patchText       = '';
-          previewActive   = false;
-          compareText     = headText;
-          setDiff(headText, headText);
-          updateNav();
-        } else if (versionIndex > 0) {
-          loadVersion(versionIndex - 1);
-        }
+      const loadFileBtn  = qs('loadFileBtn');
+      const loadPatchBtn = qs('loadPatchBtn');
+      const acceptBtn    = qs('acceptBtn');
+      const prevBtn      = qs('prevBtn');
+      const nextBtn      = qs('nextBtn');
+      const clearBtn     = qs('clearPatchBtn');
+      const applyBtn     = qs('applyPatchBtn');
+      const versionDisplay = qs('versionDisplay');
+      const fileInput1   = qs('fileInput1');
+      const fileInput2   = qs('fileInput2');
+      const patchArea    = qs('patchArea');
+      const dragH        = qs('dragH');
+      const dragV        = qs('dragV');
+      const patchContainer = qs('patchContainer');
+      const patchBtns    = qs('patchBtns');
+
+      //------------------------------------------------------------------
+      // State vars (unchanged parts collapsed)
+      //------------------------------------------------------------------
+      let headText='', compareText='', patchText='', currentFile='';
+      let versions=[], versionIndex=0, previewActive=false;
+      const setDiff = (orig, mod) => {
+        diffEditor.setModel({
+          original: monaco.editor.createModel(orig, 'python'),
+          modified: monaco.editor.createModel(mod,  'python')
+        });
       };
+      const toast = m=>{console.error(m);alert(m);};
 
-      nextBtn.onclick = () => {
-        if (!previewActive && versionIndex < versions.length) {
-          loadVersion(versionIndex + 1);
+      //------------------------------------------------------------------
+      // DRAG HANDLES -----------------------------------------------------
+      //------------------------------------------------------------------
+      // Horizontal drag (height of patch container)
+      (()=>{
+        let startY, startHeight;
+        dragH.addEventListener('mousedown', e=>{
+          startY = e.clientY;
+          startHeight = patchContainer.getBoundingClientRect().height;
+          document.body.style.cursor='row-resize';
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
+        function onMove(ev){
+          const dy = ev.clientY - startY;
+          const newH = Math.max(80, startHeight - dy);
+          patchContainer.style.flexBasis = newH + 'px';
         }
-      };
-
-      acceptBtn.onclick = async () => {
-        try {
-          const rightContent = diffEditor.getModifiedEditor().getModel().getValue();
-          await fetch('/accept_changes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ file: currentFile, text: rightContent })
-          });
-
-          // New HEAD becomes what we just saved
-          headText     = rightContent;
-          compareText  = headText;
-          patchArea.value = patchText = '';
-          previewActive = false;
-          setDiff(headText, headText);
-
-          await fetchVersions();
-        } catch (err) {
-          alert('Accept failed: ' + err.message);
+        function onUp(){
+          document.body.style.cursor='';
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
         }
-      };
+      })();
+
+      // Vertical drag (width of buttons strip)
+      (()=>{
+        let startX, startW;
+        dragV.addEventListener('mousedown', e=>{
+          startX = e.clientX;
+          startW = patchBtns.getBoundingClientRect().width;
+          document.body.style.cursor='col-resize';
+          window.addEventListener('mousemove', onMove);
+          window.addEventListener('mouseup', onUp);
+        });
+        function onMove(ev){
+          const dx = ev.clientX - startX;
+          const newW = Math.max(60, startW + dx);
+          patchBtns.style.flexBasis = newW + 'px';
+        }
+        function onUp(){
+          document.body.style.cursor='';
+          window.removeEventListener('mousemove', onMove);
+          window.removeEventListener('mouseup', onUp);
+        }
+      })();
+
+      //------------------------------------------------------------------
+      // (Rest of JS logic unchanged from previous version)
+      //------------------------------------------------------------------
+      function updateNav(){
+        prevBtn.disabled=!(previewActive||versionIndex>0);
+        nextBtn.disabled=!(!previewActive&&versionIndex<versions.length);
+        acceptBtn.disabled=(compareText===headText);
+        clearBtn.disabled=applyBtn.disabled=!patchText.trim();
+        versionDisplay.textContent=previewActive?'Preview':(versionIndex===versions.length?'Head':(versions[versionIndex]?.sha||'Head'));
+      }
+      async function fetchVersions(){try{const r=await fetch(`/versions?file=${encodeURIComponent(currentFile)}`);versions=r.ok?await r.json():[]}catch{versions=[]}versionIndex=versions.length;updateNav();}
+      async function loadHead(){const r=await fetch(`/file?file=${encodeURIComponent(currentFile)}`);if(!r.ok)return toast('Failed to load current file');headText=compareText=await r.text();setDiff(headText,headText);versionIndex=versions.length;previewActive=false;updateNav();}
+      async function loadVersion(i){if(i===versions.length)return loadHead();const sha=versions[i].sha;const r=await fetch(`/version?file=${encodeURIComponent(currentFile)}&sha=${encodeURIComponent(sha)}`);if(!r.ok)return toast('Failed to load version');compareText=await r.text();setDiff(headText,compareText);versionIndex=i;previewActive=false;updateNav();}
+      async function previewPatch(){if(!patchText.trim()){previewActive=false;compareText=headText;setDiff(headText,headText);updateNav();return;}try{const r=await fetch('/apply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({patch:patchText})});if(!r.ok)throw new Error(await r.text());const res=await r.json();compareText=res[currentFile]||res[Object.keys(res)[0]];setDiff(headText,compareText);previewActive=true;updateNav();}catch(e){toast('Preview failed: '+e.message);} }
+      // launch
+      patchArea.value='';updateNav();
+      loadFileBtn.onclick=()=>fileInput1.click();fileInput1.onchange=async e=>{const f=e.target.files[0];if(!f)return;headText=compareText=await f.text();currentFile=f.name;setDiff(headText,headText);loadPatchBtn.disabled=false;patchArea.value=patchText='';previewActive=false;await fetchVersions();};
+      loadPatchBtn.onclick=()=>fileInput2.click();fileInput2.onchange=async e=>{const f=e.target.files[0];if(!f)return;patchArea.value=patchText=await f.text();applyBtn.disabled=false;await previewPatch();};
+      clearBtn.onclick=()=>{patchArea.value=patchText='';previewActive=false;compareText=headText;setDiff(headText,headText);updateNav();patchArea.focus();};
+      applyBtn.onclick=()=>{patchText=patchArea.value;previewPatch();};
+      patchArea.addEventListener('input',()=>{patchText=patchArea.value;updateNav();});
+      patchArea.addEventListener('paste',async e=>{e.preventDefault();const txt=(e.clipboardData||window.clipboardData).getData('text');patchArea.value=patchText=txt;applyBtn.disabled=false;await previewPatch();});
+      prevBtn.onclick=()=>{if(previewActive)clearBtn.click();else if(versionIndex>0)loadVersion(versionIndex-1);};
+      nextBtn.onclick=()=>{if(!previewActive&&versionIndex<versions.length)loadVersion(versionIndex+1);};
+      acceptBtn.onclick=async()=>{try{const right=diffEditor.getModifiedEditor().getModel().getValue();const r=await fetch('/accept_changes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({file:currentFile,text:right})});if(!r.ok)throw new Error(await r.text());headText=compareText=right;patchArea.value=patchText='';previewActive=false;setDiff(headText,headText);await fetchVersions();}catch(e){toast('Accept failed: '+e.message);}};
     });
   </script>
 </body>
