@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import logging # Optional: for better logging
 import re
 import os
 import tempfile
@@ -172,8 +173,128 @@ def revert_version():
 # -----------------------------------------------------------------------------
 #  Accept Changes route – full-file overwrite without duplicate backups
 # -----------------------------------------------------------------------------
+#################################################
+# google ai code
+#
+# Assuming BASE_DIR is defined elsewhere, pointing to your project root
+# from your_config import BASE_DIR
+# Example:
+
+# Assuming vibe_cli._backup exists and works as intended
+from vibe_cli import _backup
+
+DEFAULT_BACKUP_LIMIT = 20
+
 @app.route('/accept_changes', methods=['POST'])
 def accept_changes():
+    payload = request.get_json(force=True) or {}
+    fname = payload.get('file')
+    new_text = payload.get('text')
+
+    # --- 1. Input Validation ---
+    if not fname or new_text is None:
+        logging.error("accept_changes: Missing 'file' or 'text' in JSON payload.")
+        return jsonify({'error': "Missing 'file' or 'text' in JSON"}), 400
+
+    # Get backup limit, ensure it's a non-negative integer
+    try:
+        backup_limit = int(payload.get('backupLimit', DEFAULT_BACKUP_LIMIT))
+        if backup_limit < 0:
+            logging.warning(f"accept_changes: Received negative backupLimit, using default {DEFAULT_BACKUP_LIMIT}.")
+            backup_limit = DEFAULT_BACKUP_LIMIT
+    except (ValueError, TypeError):
+        logging.warning(f"accept_changes: Invalid backupLimit type, using default {DEFAULT_BACKUP_LIMIT}.")
+        backup_limit = DEFAULT_BACKUP_LIMIT
+
+    target = (BASE_DIR / fname).resolve() # Use resolve for cleaner path
+
+    # Security check: Ensure target is within BASE_DIR (prevent directory traversal)
+    if not target.is_relative_to(BASE_DIR.resolve()):
+         logging.error(f"accept_changes: Attempted access outside BASE_DIR: {fname}")
+         return jsonify({'error': "Invalid file path"}), 400
+
+    if not target.is_file(): # Check if it's actually a file
+        logging.error(f"accept_changes: File not found or is not a file: {fname}")
+        return jsonify({'error': f"File not found: {fname}"}), 404
+
+    # --- 2. Backup Creation (Conditional) ---
+    bdir = target.parent / "VibeBackups"
+    needs_backup = True # Assume backup needed unless proven otherwise
+    current_content = ""
+    try:
+        current_content = target.read_text() # Read current content *once*
+        if bdir.is_dir():
+            # Use the file's suffix dynamically
+            backup_pattern = f"{target.stem}_*{target.suffix}"
+            backups = sorted(bdir.glob(backup_pattern))
+            if backups:
+                latest_backup_path = backups[-1]
+                try:
+                    # Compare current disk content with latest backup content
+                    if current_content == latest_backup_path.read_text():
+                        needs_backup = False
+                        logging.info(f"accept_changes: Content matches latest backup {latest_backup_path.name}. Skipping backup.")
+                except Exception as e:
+                    # Log error reading backup, but proceed with backup just in case
+                    logging.warning(f"accept_changes: Could not read or compare latest backup {latest_backup_path.name}: {e}. Proceeding with backup.")
+            # else: No backups exist yet for this file, so definitely need one
+        # else: Backup dir doesn't exist, definitely need one (handled by _backup)
+
+        if needs_backup and current_content != new_text: # Also check if content actually changed
+             logging.info(f"accept_changes: Creating backup for {fname}.")
+             _backup(target) # Call your backup function
+        elif current_content == new_text:
+             logging.info(f"accept_changes: New content is identical to current content for {fname}. Skipping write and backup.")
+             # Skip writing and pruning if content is identical
+             return "", 204 # Or maybe 304 Not Modified? 204 is safe.
+
+    except Exception as e:
+        # Handle errors during backup check/creation phase
+        logging.error(f"accept_changes: Error during backup check/creation for {fname}: {e}", exc_info=True)
+        # Depending on policy, you might still try to write the file, or fail here
+        return jsonify({'error': f"Failed during backup process: {e}"}), 500
+
+
+    # --- 3. Overwrite with New Content ---
+    try:
+        target.write_text(new_text)
+        logging.info(f"accept_changes: Successfully wrote new content to {fname}.")
+    except Exception as e:
+        logging.error(f"accept_changes: Error writing file {target}: {e}", exc_info=True)
+        # If write fails, we probably shouldn't prune backups based on this failed attempt
+        return jsonify({'error': f"Failed to write file: {e}"}), 500
+
+    # --- 4. Prune Old Backups ---
+    if backup_limit >= 0 and bdir.is_dir(): # Proceed only if limit is non-negative and dir exists
+        try:
+            # Get all backups for this file *after* potential new one was added & file written
+            backup_pattern = f"{target.stem}_*{target.suffix}"
+            all_backups = sorted(bdir.glob(backup_pattern))
+            num_backups = len(all_backups)
+
+            if num_backups > backup_limit:
+                num_to_delete = num_backups - backup_limit
+                backups_to_delete = all_backups[:num_to_delete] # Oldest are first
+
+                logging.info(f"accept_changes: Pruning {num_to_delete} backups for {fname} (limit {backup_limit}).")
+                for backup_path in backups_to_delete:
+                    try:
+                        backup_path.unlink()
+                        logging.info(f"  Deleted backup: {backup_path.name}")
+                    except OSError as e:
+                        # Log error but continue trying to delete others
+                        logging.error(f"  Error deleting backup {backup_path.name}: {e}")
+            else:
+                 logging.info(f"accept_changes: Backup count ({num_backups}) for {fname} is within limit ({backup_limit}). No pruning needed.")
+
+        except Exception as e:
+             # Log error during pruning process, but don't fail the request
+             logging.error(f"accept_changes: Error during backup pruning for {fname}: {e}", exc_info=True)
+
+    return "", 204 # Success - No Content
+#################################################
+@app.route('/old_accept_changes', methods=['POST'])
+def old_accept_changes():
     payload = request.get_json(force=True) or {}
     fname = payload.get('file')
     new_text = payload.get('text')
