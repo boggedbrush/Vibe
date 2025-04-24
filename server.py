@@ -29,8 +29,8 @@ parser.add_argument(
 parser.add_argument(
     "--port",
     type=int,
-    default=8088,
-    help="Port to listen on (default: 8088)"
+    default=8000,
+    help="Port to listen on (default: 8000)"
 )
 args = parser.parse_args()
 BASE_DIR = Path(args.baseDir).resolve()
