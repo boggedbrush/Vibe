@@ -21,14 +21,14 @@ This guide provides a quick visual walkthrough of the core Vibe workflow: launch
 *   Upload or paste the `hello.py` code.
 *   Provide your request, referencing the prompt and code: "Please review the system-prompt and create a Vibe Patch to add a new class called GrumpyGreeter to hello.py".
 
-    ![Prompting ChatGPT with system prompt, hello.py, and request](screenshots/chatgpt_prompt.png "Step 2a: Prompting AI")
+    ![Prompting ChatGPT with system prompt, hello.py, and request](screenshots/ai-upload-and-prompt.png "Step 2a: Prompting AI")
 
 *   The AI should generate a Vibe Patch in the correct YAML format. Copy the generated YAML code block.
 
-    ![ChatGPT generating the Vibe Patch YAML](screenshots/chatgpt_response.png "Step 2b: AI Generates Patch")
+    ![ChatGPT generating the Vibe Patch YAML](screenshots/ai-response.png  "Step 2b: AI Generates Patch")
 
     *(Alternatively, you can use tools like Google AI Studio with the same system prompt and code.)*
-    ![Google AI Studio generating the Vibe Patch YAML](screenshots/google_ai_studio.png "Alternative AI: Google AI Studio")
+    ![Google AI Studio generating the Vibe Patch YAML](screenshots/google-studio-1shot.png "Alternative AI: Google AI Studio")
 
 **3. Preview the Patch in Vibe UI**
 
@@ -37,7 +37,7 @@ This guide provides a quick visual walkthrough of the core Vibe workflow: launch
 *   Click the **"Preview Patch"** button located just above the patch editor.
 *   The right-hand pane of the diff view will update to show a preview of `hello.py` *with the patch applied*. You can see the differences highlighted.
 
-    ![Vibe UI showing hello.py, pasted patch, and diff preview](screenshots/vibe_diff_ui_preview.png "Step 3: Paste and Preview Patch")
+    ![Vibe UI showing hello.py, pasted patch, and diff preview](screenshots/ai-patch-preview.png "Step 3: Paste and Preview Patch")
 
 **4. Apply the Changes**
 
