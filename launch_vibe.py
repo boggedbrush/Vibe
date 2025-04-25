@@ -1,3 +1,6 @@
+'''
+Launcher for ./server.py that captured filename and base directory and passed that over to the server.
+'''
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext
 import subprocess
