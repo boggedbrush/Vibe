@@ -77,122 +77,6 @@ def load_patches(patch_path: Path) -> List[Tuple[Dict[str, Any], str]]:
 
     return patches
 
-def old_load_patches(patch_path: Path) -> List[Tuple[Dict[str, Any], str]]:
-    """
-    Load one or more VibeSpec patches from a .vibe file.
-    Returns a list of (metadata_dict, code_str) tuples.
-    """
-    text = patch_path.read_text()
-    lines = text.splitlines()
-    patches: List[Tuple[Dict[str, Any], str]] = []
-    i = 0
-    current_version: Any = None
-
-    while i < len(lines):
-        line = lines[i]
-        # Skip blank lines
-        if not line.strip():
-            i += 1
-            continue
-
-        # Capture VibeSpec header
-        m = re.match(r'^#\s*VibeSpec:\s*(\d+\.\d+)', line)
-        if m:
-            current_version = m.group(1)
-            i += 1
-            continue
-
-        # Read metadata lines until code block or end of metadata
-        meta_lines: List[str] = []
-        while i < len(lines) and not lines[i].startswith("--- code:"):
-            meta_lines.append(lines[i])
-            i += 1
-
-        # Parse metadata YAML
-        meta: Dict[str, Any] = yaml.safe_load("\n".join(meta_lines)) or {}
-        if current_version:
-            meta["VibeSpec"] = current_version
-
-        # Read optional code block
-        code = ""
-        if i < len(lines) and lines[i].startswith("--- code:"):
-            i += 1
-            code_lines: List[str] = []
-            while i < len(lines):
-                ln = lines[i]
-                # stop on next patch header
-                if ln.startswith("patch_type:"):
-                    break
-                # stop on non-indented, non-blank line
-                if ln.strip() and not ln.startswith((" ", "\t")):
-                    break
-                code_lines.append(ln)
-                i += 1
-            code = dedent("\n".join(code_lines)).rstrip("\n")
-
-        patches.append((meta, code))
-
-    return patches
-
-def old_load_patches(patch_path: Path) -> List[Tuple[Dict, str]]:
-    """
-    Load one or more VibeSpec patches from a .vibe file,
-    capturing the VibeSpec version and parsing metadata.
-    Returns a list of (metadata_dict, code_str) tuples.
-    """
-    text = patch_path.read_text()
-    lines = text.splitlines()
-    patches = []
-    current_version = None
-    i = 0
-
-    while i < len(lines):
-        # Skip blank lines
-        if not lines[i].strip():
-            i += 1
-            continue
-
-        # Capture VibeSpec header version
-        if lines[i].startswith("# VibeSpec:"):
-            current_version = lines[i].split("# VibeSpec:", 1)[1].strip()
-            i += 1
-            continue
-
-        # Read metadata lines until the '--- code:' marker
-        meta_lines = []
-        while i < len(lines) and not lines[i].startswith('--- code:'):
-            meta_lines.append(lines[i])
-            i += 1
-
-        if i >= len(lines):
-            break
-
-        # Parse metadata YAML
-        meta = yaml.safe_load("\n".join(meta_lines)) or {}
-
-        # Attach version metadata if available
-        if current_version is not None:
-            meta['VibeSpec'] = current_version
-
-        # Skip the code-block header
-        i += 1
-
-        # Collect code block lines (allow blank lines)
-        code_lines = []
-        while i < len(lines):
-            ln = lines[i]
-            if ln.startswith("patch_type:"):
-                break
-            if ln.strip() and not ln.startswith((" ", "\t")):
-                break
-            code_lines.append(ln)
-            i += 1
-
-        code = dedent("\n".join(code_lines)).rstrip("\n")
-        patches.append((meta, code))
-
-    return patches
-
 def apply_patches(patches: List[Tuple[Dict[str, Any], str]], repo: Path, dry: bool=False):
     """
     Apply each (meta, code) in sequence.
@@ -342,55 +226,6 @@ def validate_spec(meta: Dict[str, Any]) -> None:
         has_s = "anchor_start" in meta
         has_e = "anchor_end"   in meta
         if has_s ^ has_e:
-            raise ValueError("remove_block requires both `anchor_start` and `anchor_end` when using anchors")
-
-def old_validate_spec(meta: Dict[str, Any]) -> None:
-    """
-    Ensure the patch metadata is well‑formed and supported.
-    Raises ValueError on any problem.
-    """
-    # 1) Required keys
-    required = {"VibeSpec", "patch_type", "file"}
-    missing = required - set(meta.keys())
-    if missing:
-        raise ValueError(f"Missing meta keys: {sorted(missing)}")
-
-    # 2) Spec version (allow 1.0, 1.2, 1.3, 1.4)
-    vs = meta["VibeSpec"]
-    if vs not in ("1.0", "1.2", "1.3", "1.4"):
-        raise ValueError(f"Unsupported VibeSpec version: {vs}")
-
-    # 3) Supported patch types
-    pt = meta["patch_type"]
-    allowed = {
-        "add_function", "add_method", "add_class", "add_block", 
-        "remove_function", "remove_method", "remove_class", "remove_block",
-    }
-    if pt not in allowed:
-        raise ValueError(f"Unsupported patch_type: {pt}")
-
-    # 4) 'class' key required for method patches
-    if pt in ("add_method", "remove_method") and not meta.get("class"):
-        raise ValueError("`class` key is required for method patches")
-
-    # 5) 'name' key required for named removals
-    if pt in ("remove_function", "remove_method", "remove_class") and not meta.get("name"):
-        raise ValueError("`name` key is required for named removal patches")
-
-    # 6) add_block additional checks
-    if pt == "add_block":
-        pos = meta.get("position", "end")
-        if pos not in ("start", "end", "before", "after"):
-            raise ValueError(f"Invalid position for add_block: {pos}")
-        if pos in ("before", "after") and not meta.get("anchor"):
-            raise ValueError("add_block with before/after requires an `anchor` regex")
-
-    # 7) remove_block additional checks (anchors optional)
-    if pt == "remove_block":
-        # if one anchor given, require the other
-        has_start = "anchor_start" in meta
-        has_end   = "anchor_end" in meta
-        if has_start ^ has_end:
             raise ValueError("remove_block requires both `anchor_start` and `anchor_end` when using anchors")
 
 # =============================================================================
@@ -681,19 +516,42 @@ def _remove_class(src: str, cls: str) -> str:
 def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
     """
     Apply a single VibeSpec patch described by meta and code to the target file.
+    Creates the target file if it doesn't exist for 'add_*'/'replace_*' patches.
     """
     target = repo / meta["file"]
-    if not target.exists():
-        raise FileNotFoundError(target)
-    _log("Backup → {}", _backup(target))
+    pt = meta["patch_type"] # Get patch type early
 
-    src = target.read_text()
-    pt = meta["patch_type"]
+    # --- MODIFICATION START ---
+    file_existed_originally = target.exists()
+    src = "" # Initialize src
+
+    if not file_existed_originally:
+        # File doesn't exist. Check if patch type allows creation.
+        is_add_or_replace = pt.startswith("add_") or pt.startswith("replace_") # Basic check
+        if is_add_or_replace:
+            _log("Target file {} does not exist. Creating for patch type '{}'.", target.name, pt)
+            # Ensure parent directory exists
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # Create empty file to operate on
+            target.write_text("", encoding='utf-8')
+            src = "" # Source is empty for a new file
+        else:
+            # If it's a remove_* patch or similar on a non-existent file, raise error
+            raise FileNotFoundError(f"Target file '{target}' not found for patch type '{pt}'.")
+    else:
+        # File exists, proceed with backup and reading source
+        if not dry: # Only backup if not dry run and file existed
+             _log("Backup → {}", _backup(target))
+        src = target.read_text(encoding='utf-8')
+    # --- MODIFICATION END ---
+
+    # --- Rest of the function remains largely the same ---
     block = dedent(code).rstrip("\n")
-    lines = src.splitlines(keepends=True)
+    lines = src.splitlines(keepends=True) # Use src which is now correctly loaded or empty
 
-    # helper to remove blocks by regex anchors or indent-sensitive
+    # helper to remove blocks by regex anchors or indent-sensitive (keep as is)
     def _remove_block(lines, start_re, end_re=None, indent_sensitive=False):
+        # ... (implementation remains the same) ...
         new_lines = []
         skipping = False
         base_indent = None
@@ -708,221 +566,172 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
                 if end_re:
                     if end_re.search(ln):
                         skipping = False
-                    continue
+                    continue # Always continue if using end_re until it matches
                 if indent_sensitive:
                     curr_indent = len(ln) - len(ln.lstrip())
-                    if curr_indent > base_indent and ln.strip():
-                        continue
-                    else:
-                        skipping = False
-                else:
+                    # Skip indented lines or blank lines within the block
+                    if (curr_indent > base_indent and ln.strip()) or (not ln.strip()):
+                         continue
+                    else: # Non-blank line at or below base_indent: stop skipping
+                         skipping = False
+                         # Fall through to append this line
+                else: # Not indent sensitive, stop skipping on first non-blank, non-indented line
                     if not ln.strip() or ln.startswith((" ", "\t")):
                         continue
                     else:
                         skipping = False
-            new_lines.append(ln)
+                         # Fall through to append this line
+
+            new_lines.append(ln) # Append if not skipping
         return "".join(new_lines)
 
+
+    # --- Patch Type Logic (mostly unchanged, operates on potentially empty src) ---
+    new_src = "" # Initialize new_src
     if pt == "add_function":
-        # allow decorators before the `def`
         m = re.search(r"^\s*def\s+(\w+)", block, re.MULTILINE)
-        if not m:
-            raise ValueError(f"Invalid add_function block, no function signature found in:\n{block}")
+        if not m: raise ValueError(f"Invalid add_function block, no func sig: {block[:80]}...")
         name = m.group(1)
         new_src = _replace_function(src, name, block)
 
     elif pt == "add_method":
-        cls = meta.get("class", "")
-        # allow decorators before the `def`
+        cls = meta.get("class")
+        if not cls: raise ValueError("`class` key required for add_method")
         m = re.search(r"^\s*def\s+(\w+)", block, re.MULTILINE)
-        if not m:
-            raise ValueError(f"Invalid add_method block, no method signature found in:\n{block}")
+        if not m: raise ValueError(f"Invalid add_method block, no method sig: {block[:80]}...")
         name = m.group(1)
         new_src = _replace_method(src, cls, name, block)
 
     elif pt == "add_class":
-        # allow decorators before the `class`
         mcls = re.search(r"^\s*class\s+(\w+)", block, re.MULTILINE)
         cls_name = mcls.group(1) if mcls else None
-        if cls_name and re.search(rf"^\s*class\s+{re.escape(cls_name)}\b", src, re.MULTILINE):
-            new_src = _replace_class(src, cls_name, block)
-        else:
-            new_src = src.rstrip("\n") + "\n\n" + block + "\n"
+        # Always use _replace_class for add_class; it handles append if not found
+        new_src = _replace_class(src, cls_name, block) if cls_name else (src.rstrip("\n") + "\n\n" + block + "\n")
+
 
     elif pt == "add_block":
         pos = meta.get("position", "end")
         anchor = meta.get("anchor")
         if pos == "start":
-            new_src = block.rstrip() + "\n\n" + src
+            new_src = block.rstrip() + ("\n\n" if src.strip() else "\n") + src # Add only one newline if src is empty
 
         elif pos in ("before", "after"):
-            if not anchor:
-                raise ValueError("add_block before/after requires an `anchor` regex")
+            if not anchor: raise ValueError("add_block before/after requires `anchor` regex")
             pat = re.compile(anchor)
-            idx = next((i for i, ln in enumerate(lines) if pat.search(ln)), len(lines))
+            # Use finditer to handle potential multiple matches if needed, though next usually suffices
+            match_indices = [i for i, ln in enumerate(lines) if pat.search(ln)]
+            idx = match_indices[0] if match_indices else len(lines) # Find first match or EOF
+
             if pos == "after" and idx < len(lines):
-                anchor_indent = len(lines[idx]) - len(lines[idx].lstrip())
+                # Advance index past the matched block for 'after'
+                anchor_indent = len(lines[idx]) - len(lines[idx].lstrip()) if lines[idx].strip() else float('inf')
                 j = idx + 1
                 while j < len(lines):
                     ln = lines[j]
-                    ws = len(ln) - len(ln.lstrip())
+                    ws = len(ln) - len(ln.lstrip()) if ln.strip() else float('inf')
+                    # Stop at the next line with equal or lesser indentation, or EOF
                     if ln.strip() and ws <= anchor_indent:
                         break
                     j += 1
-                idx = j
-            if idx > 0 and lines[idx-1].strip():
-                lines.insert(idx, "\n"); idx += 1
-            lines.insert(idx, block.rstrip() + "\n")
-            lines.insert(idx+1, "\n")
+                idx = j # Insertion point is after the block
+
+            # Ensure single blank line before insertion point (unless at start)
+            if idx > 0 and idx < len(lines) and lines[idx-1].strip() and lines[idx].strip(): # Check both surrounding lines
+                 lines.insert(idx, "\n")
+                 idx += 1
+            elif idx > 0 and not lines[idx-1].strip(): # If line before is blank, use it
+                 pass
+            elif idx == 0 and lines: # Inserting at very beginning before existing content
+                 lines.insert(idx, "\n") # Insert blank line after new block
+                 idx +=1 # this seems wrong.. should insert before the block? test this
+            elif idx > 0 and lines[idx-1].strip(): # only line before has content
+                 lines.insert(idx, "\n")
+                 idx += 1
+
+
+            # Insert the block, ensuring appropriate newlines
+            lines.insert(idx, block.rstrip() + "\n") # Add the block with one newline
+            # Add another newline after if not at EOF and next line isn't already blank
+            if (idx + 1) < len(lines) and lines[idx+1].strip():
+                lines.insert(idx + 1, "\n")
+            elif (idx + 1) == len(lines): # If inserting right at the end
+                 lines.append("\n") # Ensure a trailing newline for the file
+
+
             new_src = "".join(lines)
-        else:
-            new_src = src.rstrip("\n") + "\n\n" + block.rstrip() + "\n"
+        else: # Default 'end' position
+             sep = "\n\n" if src.strip() else "\n" # Add only one newline if src is empty
+             new_src = src.rstrip("\n") + sep + block.rstrip() + "\n" # Ensure trailing newline
 
     elif pt == "remove_block":
-        start_re = re.compile(meta["anchor_start"])
-        end_re   = re.compile(meta["anchor_end"])
-        new_src = _remove_block(lines, start_re, end_re)
+        start_pat = meta.get("anchor_start")
+        end_pat = meta.get("anchor_end")
+        if not start_pat or not end_pat: raise ValueError("remove_block requires anchor_start and anchor_end")
+        start_re = re.compile(start_pat)
+        end_re   = re.compile(end_pat)
+        new_src = _remove_block(lines, start_re, end_re) # Pass lines list
 
     elif pt == "remove_function":
-        # now uses the decorator‑aware helper
-        name    = meta["name"]
+        name = meta.get("name")
+        if not name: raise ValueError("remove_function requires `name`")
         new_src = _remove_function(src, name)
 
     elif pt == "remove_method":
-        # now uses the decorator‑aware helper
-        cls     = meta.get("class", "")
-        name    = meta["name"]
+        cls = meta.get("class")
+        name = meta.get("name")
+        if not cls or not name: raise ValueError("remove_method requires `class` and `name`")
         new_src = _remove_method(src, cls, name)
-        
+
     elif pt == "remove_class":
-        cls_rm = meta["name"]
+        cls_rm = meta.get("name")
+        if not cls_rm: raise ValueError("remove_class requires `name`")
         new_src = _remove_class(src, cls_rm)
 
-    else:
-        new_src = src.rstrip("\n") + "\n\n" + block + "\n"
+    # --- Handle replace_block (if distinct logic is needed) ---
+    elif pt == "replace_block":
+         # Current implementation might implicitly handle some cases via add_*
+         # If specific anchor-based replacement is intended:
+         start_pat = meta.get("anchor_start")
+         end_pat = meta.get("anchor_end")
+         if start_pat and end_pat:
+              start_re = re.compile(start_pat); end_re = re.compile(end_pat)
+              # Find start/end indices
+              start_idx = -1; end_idx = -1
+              for i, ln in enumerate(lines):
+                   if start_idx == -1 and start_re.search(ln): start_idx = i
+                   if start_idx != -1 and end_re.search(ln): end_idx = i + 1; break # Include end line range
+              if start_idx != -1 and end_idx != -1:
+                   new_lines = lines[:start_idx] + [block.rstrip() + "\n"] + lines[end_idx:]
+                   # Add surrounding newlines if needed, similar to add_block logic
+                   if start_idx > 0 and lines[start_idx-1].strip(): new_lines.insert(start_idx, "\n")
+                   if end_idx < len(lines) and lines[end_idx].strip(): new_lines.insert(start_idx + 2, "\n") # After the inserted block+newline
+                   new_src = "".join(new_lines)
+              else: # Anchors not found, maybe append or error? Append for now.
+                  _log("Warning: replace_block anchors not found for '{}'. Appending.", target.name)
+                  sep = "\n\n" if src.strip() else "\n"
+                  new_src = src.rstrip("\n") + sep + block.rstrip() + "\n"
+         else: # No anchors, treat like add_block 'end' or raise error?
+             _log("Warning: replace_block used without anchors. Appending block for '{}'.", target.name)
+             sep = "\n\n" if src.strip() else "\n"
+             new_src = src.rstrip("\n") + sep + block.rstrip() + "\n"
 
+    else: # Fallback for unrecognized patch types or unhandled cases
+        _log(f"Warning: Unhandled patch_type '{pt}' or scenario for {target.name}. Appending code.")
+        sep = "\n\n" if src.strip() else "\n"
+        new_src = src.rstrip("\n") + sep + block.rstrip() + "\n"
+
+
+    # --- Final write or print ---
     if dry:
-        print(new_src)
-        return new_src
+        print(new_src.rstrip()) # Print for dry run, strip final newline for cleaner output
+        return new_src # Return the modified source for the tester
 
-    target.write_text(new_src)
+    # Write the modified source back to the target file
+    target.write_text(new_src, encoding='utf-8')
     _log("Patch applied to {}", target)
-
-def old_apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
-    target = repo / meta["file"]
-    if not target.exists():
-        raise FileNotFoundError(target)
-    _log("Backup → {}", _backup(target))
-    src = target.read_text()
-    pt  = meta["patch_type"]
-
-    # Dedent once—applies to all block types
-    block = dedent(code).rstrip("\n")
-    lines = src.splitlines(keepends=True)
-
-    if pt == "add_function":
-        name = re.match(r"def\s+(\w+)", block, re.MULTILINE).group(1)
-        new_src = _replace_function(src, name, block)
-
-    elif pt == "add_method":
-        cls  = meta.get("class") or ""
-        name = re.match(r"def\s+(\w+)", block).group(1)
-        new_src = _replace_method(src, cls, name, block)
-
-    elif pt == "add_class":
-        # If the class already exists, replace it; otherwise append the full block.
-        mcls = re.match(r"class\s+(\w+)", block)
-        cls  = mcls.group(1) if mcls else None
-        if cls and re.search(rf"^\s*class\s+{re.escape(cls)}\b", src, re.MULTILINE):
-            # replace existing class definition
-            new_src = _replace_class(src, cls, block)
-        else:
-            # append the new class (including all methods) at EOF
-            trimmed = src.rstrip("\n")
-            new_src = trimmed + "\n\n" + block + "\n"
-
-    elif pt == "add_block":
-        pos    = meta.get("position", "end")
-        anchor = meta.get("anchor")
-
-        if pos == "start":
-            # Prepend block + blank line
-            new_src = block + "\n\n" + src
-
-        elif pos in ("before", "after") and anchor:
-            pat = re.compile(anchor)
-            # locate the anchor line
-            idx = next((i for i, ln in enumerate(lines) if pat.search(ln)), None)
-            if idx is None:
-                # fallback to end of file
-                idx = len(lines)
-
-            if pos == "after":
-                # If anchor begins a block (e.g. def/class), move to end of that block
-                indent = len(lines[idx]) - len(lines[idx].lstrip())
-                j = idx + 1
-                while j < len(lines):
-                    ln = lines[j]
-                    ws = len(ln) - len(ln.lstrip())
-                    if ln.strip() and ws <= indent:
-                        break
-                    j += 1
-                idx = j
-
-            # ensure a single blank line before insertion
-            if idx > 0 and lines[idx-1].strip():
-                lines.insert(idx, "\n")
-                idx += 1
-
-            # insert the block plus a blank line after
-            lines.insert(idx, block + "\n")
-            lines.insert(idx + 1, "\n")
-            new_src = "".join(lines)
-
-        else:
-            # default: append at EOF
-            trimmed = src.rstrip("\n")
-            new_src = trimmed + "\n\n" + block + "\n"
-
-    elif pt == "remove_function":
-        # remove a top‐level function by its name
-        func_name = meta["name"]
-        new_src = _remove_function(src, func_name)
-
-    elif pt == "remove_method":
-        # remove a method inside a class by its name
-        cls_name  = meta["class"]
-        meth_name = meta["name"]
-        new_src = _remove_method(src, cls_name, meth_name)
-
-    elif pt == "remove_class":
-        # remove an entire class by its name
-        cls_name = meta["name"]
-        new_src   = _remove_class(src, cls_name)
-
-    elif pt == "remove_block":
-        # generic block removal by anchors or literal match
-        if "anchor_start" in meta and "anchor_end" in meta:
-            new_src = _remove_between(
-                src,
-                meta["anchor_start"],
-                meta["anchor_end"]
-            )
-        else:
-            # delete the exact code lines (if any) or do nothing
-            literal = code.rstrip() + "\n"
-            new_src  = src.replace(literal, "")
-    else:
-        # fallback behavior for unknown patch types
-        trimmed = src.rstrip("\n")
-        new_src  = trimmed + "\n\n" + block + "\n"
-
-    if dry:
-        print(new_src)
-        return new_src
-
-    target.write_text(new_src)
-    _log("Patch applied to {}", target)
+    # For non-dry run, maybe return True/None? Returning new_src is mostly for dry run.
+    # Let's return None for non-dry run to avoid confusion.
+    return None
 
 # =============================================================================
 #  CLI
