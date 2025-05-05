@@ -1,0 +1,9 @@
+# VibeSpec: 1.6
+patch_type: add_block
+file: new_file.py
+position: start
+--- code: |
+  import numpy as np
+  import matplotlib.pyplot as plt
+
+  print("new_file.py created and imports added.")
