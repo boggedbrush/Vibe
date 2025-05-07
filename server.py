@@ -306,6 +306,8 @@ def revert_version():
 # from flask import request, jsonify
 # from vibe_cli import _backup # Assuming this is imported correctly
 
+# Replace the accept_changes function in server.py with this version:
+
 @app.route('/accept_changes', methods=['POST'])
 def accept_changes():
     logger = logging
@@ -320,16 +322,14 @@ def accept_changes():
     try:
         backup_limit = int(payload.get('backupLimit', 20))
     except (ValueError, TypeError):
-        backup_limit = 20 # Default if parsing fails
-    if backup_limit < 0:
-        backup_limit = 20 # Ensure non-negative limit
+        backup_limit = 20
+    if backup_limit < 0: backup_limit = 20
 
     target = (BASE_DIR / relative_fname).resolve()
-    resolved_base_dir = BASE_DIR.resolve() # For robust comparison
+    resolved_base_dir = BASE_DIR.resolve()
 
     # --- Security Check ---
     if not target.is_relative_to(resolved_base_dir):
-        # Check based on resolved paths
         if not target.resolve().is_relative_to(resolved_base_dir.resolve()):
             logger.error(f"accept_changes path outside BASE_DIR: {relative_fname}")
             return jsonify({'error': "Invalid path specified"}), 400
@@ -341,77 +341,62 @@ def accept_changes():
         logger.error(f"Error creating parent directory for {target}: {e}", exc_info=True)
         return jsonify({'error': f"Failed to create directory structure: {e}"}), 500
 
-    # --- Check if file exists and if content differs ---
-    needs_backup = False
-    is_new_file = False
-    try:
-        # Attempt to read existing content
-        current_content = target.read_text(encoding='utf-8')
-        # If successful, file exists. Check if content is identical.
-        if current_content == new_text:
-            logger.info(f"Content identical for existing file: {relative_fname}. No action needed.")
-            return "", 204 # Success, no change
-        # File exists and content differs, mark for backup before overwrite
-        needs_backup = True
-        logger.info(f"Content differs for existing file: {relative_fname}. Will update.")
+    # --- Check current state and decide action ---
+    target_exists = target.is_file()
+    current_content = None
+    needs_write = True
 
-    except FileNotFoundError:
+    if target_exists:
+        try:
+            current_content = target.read_text(encoding='utf-8')
+            if current_content == new_text:
+                logger.info(f"Content identical for existing file: {relative_fname}. No action needed.")
+                needs_write = False # Skip backup, write, and prune if no change
+            else:
+                 logger.info(f"Content differs for existing file: {relative_fname}. Will backup and update.")
+        except Exception as e:
+            logger.error(f"Error reading existing target file {target}: {e}", exc_info=True)
+            return jsonify({'error': f"Error reading target file: {e}"}), 500
+    else:
         # File does not exist, it's a new file scenario
         logger.info(f"Target file {relative_fname} does not exist. Will be created.")
-        is_new_file = True
-        needs_backup = False # No need to backup a non-existent file
+        # needs_write remains True, no backup needed
 
-    except Exception as e:
-        # Handle other potential errors during read
-        logger.error(f"Error reading existing target file {target}: {e}", exc_info=True)
-        return jsonify({'error': f"Error reading target file: {e}"}), 500
-
-    # --- Perform backup if necessary ---
-    if needs_backup:
-        bdir = target.parent / "VibeBackups"
-        # Optional optimization: Check if latest backup already matches current_content
-        create_new_backup = True
-        if bdir.is_dir():
+    # --- Perform Write Operation (if needed) ---
+    backup_performed = False
+    if needs_write:
+        # --- Perform Backup BEFORE Write (only if file existed) ---
+        if target_exists:
             try:
-                backup_pattern = f"{target.stem}_*{target.suffix}"
-                backups = sorted(bdir.glob(backup_pattern))
-                if backups:
-                    latest_backup_path = backups[-1]
-                    # Compare current disk content with latest backup content
-                    if current_content == latest_backup_path.read_text(encoding='utf-8'):
-                         create_new_backup = False
-                         logger.info(f"Skipping backup; current content matches latest backup for {relative_fname}")
-            except Exception as e:
-                 # Log warning but proceed with backup creation if comparison fails
-                 logger.warning(f"Error comparing file with latest backup {latest_backup_path.name}: {e}. Proceeding with backup.")
-
-        if create_new_backup:
-            try:
-                _backup(target) # Call the backup function from vibe_cli
-                logger.info(f"Created backup for {relative_fname} before update.")
+                # Backup the existing file immediately before overwriting
+                backup_path = _backup(target)
+                backup_performed = True # Flag that a backup was made for pruning later
+                logger.info(f"Created backup '{backup_path.name}' for {relative_fname} before update.")
             except Exception as e:
                 logger.error(f"Backup creation failed for {target}: {e}", exc_info=True)
-                return jsonify({'error': f"Backup error: {e}"}), 500
+                # If backup fails, abort the write for safety
+                return jsonify({'error': f"Backup error, aborting save: {e}"}), 500
+        # --- End Backup ---
 
-    # --- Write the new content (creates file if needed, or overwrites) ---
-    try:
-        target.write_text(new_text, encoding='utf-8')
-        if is_new_file:
-            logger.info(f"Successfully created and wrote to new file: {relative_fname}")
-        else:
-            logger.info(f"Successfully updated existing file: {relative_fname}")
-    except Exception as e:
-        logger.error(f"Write failed for {target}: {e}", exc_info=True)
-        return jsonify({'error': f"Write error: {e}"}), 500
+        # --- Write the new content ---
+        try:
+            target.write_text(new_text, encoding='utf-8')
+            action = "created" if not target_exists else "updated"
+            logger.info(f"Successfully {action} file: {relative_fname}")
+        except Exception as e:
+            logger.error(f"Write failed for {target}: {e}", exc_info=True)
+            # If write fails after backup, the backup still exists. The file state is now potentially bad.
+            # Consider attempting to restore the backup? For now, just report error.
+            return jsonify({'error': f"Write error after potential backup: {e}"}), 500
+        # --- End Write ---
 
-    # --- Prune Old Backups ---
-    # This logic runs after a successful write operation
-    if backup_limit >= 0:
-        bdir = target.parent / "VibeBackups" # Define again in case only pruning runs
+    # --- Prune Old Backups (only if a backup was made in *this* operation) ---
+    # We prune only if the file existed before *and* we successfully backed it up
+    if backup_performed and backup_limit >= 0:
+        bdir = target.parent / "VibeBackups"
         if bdir.is_dir():
             try:
                 backup_pattern = f"{target.stem}_*{target.suffix}"
-                # Use list comprehension and sort for efficiency
                 all_backups = sorted([p for p in bdir.glob(backup_pattern) if p.is_file()])
                 num_backups = len(all_backups)
 
@@ -420,18 +405,13 @@ def accept_changes():
                     backups_to_delete = all_backups[:num_to_delete]
                     logger.info(f"Pruning {num_to_delete} old backup(s) for {relative_fname} (limit {backup_limit}).")
                     for bp in backups_to_delete:
-                        try:
-                            bp.unlink()
-                            # logger.debug(f"  Deleted old backup: {bp.name}")
-                        except OSError as delete_err:
-                            logger.error(f"  Error deleting old backup {bp.name}: {delete_err}")
-                # else: logger.debug(f"Backup count ({num_backups}) for {relative_fname} within limit ({backup_limit}).")
+                        try: bp.unlink()
+                        except OSError as delete_err: logger.error(f"  Error deleting old backup {bp.name}: {delete_err}")
             except Exception as prune_err:
-                 # Log errors during pruning but don't fail the whole request
                  logger.error(f"Error during backup pruning for {relative_fname}: {prune_err}", exc_info=True)
+    # --- End Pruning ---
 
-    # --- Success ---
-    return "", 204 # HTTP 204 No Content indicates success
+    return "", 204 # Success (HTTP 204 No Content)
 
 # *** NEW ROUTE TO SERVE THE PROMPT FILE ***
 @app.route('/system-prompt')

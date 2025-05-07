@@ -1,0 +1,7 @@
+# VibeSpec: 1.6
+patch_type: replace_function
+file: hello.py
+name: farewell
+--- code: |
+    def farewell(name):
+        print(f"So long, and thanks for all the fish, {name}!")

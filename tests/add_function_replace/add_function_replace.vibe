@@ -1,6 +1,0 @@
-# VibeSpec: 1.2
-patch_type: add_function
-file: hello.py
---- code: |
-    def farewell(name):
-        print(f"See you later, {name}!)  # new behavior
