@@ -1,0 +1,47 @@
+# unitarray.py - A NumPy array wrapper with units
+
+import sys
+import numpy as np
+import pint
+from typing import Iterable, Union
+import numpy.typing as npt
+
+from collections import OrderedDict
+from typing import Dict, Tuple, Sequence
+
+# Initialize the pint Unit Registry globally
+# Allow users to potentially replace this with their own configured registry if needed
+ureg = pint.UnitRegistry()
+
+class UnitArray:
+    def __init__(self, data: npt.ArrayLike, unit: Union[pint.Unit, str, None, pint.Quantity]):
+        """
+        Initialize a UnitArray.
+    
+        Parameters
+        ----------
+        data : npt.ArrayLike
+            Input data, compatible with np.asarray.
+        unit : pint.Unit | str | None | pint.Quantity
+            The unit associated with the data. Can be a pint Unit object,
+            a string that can be parsed, None (dimensionless), or a
+            pint.Quantity (its units will be used).
+        """
+        pass
+
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """
+        Handles NumPy ufuncs involving UnitArray.
+        This method allows UnitArray to interact seamlessly with NumPy ufuncs
+        by converting UnitArray instances to pint.Quantity objects and then
+        letting pint handle the ufunc logic, including unit propagation
+        and dimensionality checks.
+        """
+        if method != '__call__':
+            # For now, we only support direct calls to ufuncs.
+            # Operations like ufunc.reduce, ufunc.accumulate, etc., are not yet implemented.
+            return NotImplemented
+    
+        processed_inputs = []
+        any_unit_array_input = False # Track if any input was a UnitArray
+

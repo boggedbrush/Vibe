@@ -698,8 +698,8 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
              _log("Backup → {}", _backup(target))
         src = target.read_text(encoding='utf-8')
         # DEBUG print moved to only when file exists, to avoid printing for newly created files.
-        print(f"DEBUG apply_patch: Target path is '{target.resolve()}'") 
-        print(f"DEBUG apply_patch: Read source for {target.name}:\n>>>\n{src}\n<<<END_OF_SRC\n") 
+        #print(f"DEBUG apply_patch: Target path is '{target.resolve()}'") 
+        #print(f"DEBUG apply_patch: Read source for {target.name}:\n>>>\n{src}\n<<<END_OF_SRC\n") 
 
     block = dedent(code).rstrip("\n") if code else ""
     # Pass src to _remove_block, not lines, so it can normalize and split
@@ -753,7 +753,7 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
             if not m: raise ValueError(f"add_function: Cannot find function name in code block.")
             name_from_code = m.group(1)
             new_src = _replace_function(src, name_from_code, block)
-        elif pt == "add_method":
+        elif pt == "add_method" or pt == "replace_method":
             cls = meta.get("class")
             if not cls: raise ValueError("add_method requires 'class' metadata.")
             m = re.search(r"^\s*(?:async\s+)?def\s+([\w_]+)", block, re.MULTILINE)

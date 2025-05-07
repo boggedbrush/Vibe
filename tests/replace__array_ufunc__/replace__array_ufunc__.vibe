@@ -1,0 +1,22 @@
+# VibeSpec: 1.6
+patch_type: replace_method
+file: hello.py
+class: UnitArray
+name: __array_ufunc__
+--- code: |
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """
+        Handles NumPy ufuncs involving UnitArray.
+        This method allows UnitArray to interact seamlessly with NumPy ufuncs
+        by converting UnitArray instances to pint.Quantity objects and then
+        letting pint handle the ufunc logic, including unit propagation
+        and dimensionality checks.
+        """
+        if method != '__call__':
+            # For now, we only support direct calls to ufuncs.
+            # Operations like ufunc.reduce, ufunc.accumulate, etc., are not yet implemented.
+            return NotImplemented
+
+        processed_inputs = []
+        any_unit_array_input = False # Track if any input was a UnitArray
+
