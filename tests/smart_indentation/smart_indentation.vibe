@@ -1,0 +1,13 @@
+# VibeSpec: 1.6
+patch_type: add_block
+file: hello.py
+position: before
+anchor: '^\s*print\("--- Original Table ---"\)' # Regex for the target print line
+--- code: |
+  # This is a test of smart indentation.
+  # This block is written at column 0.
+  # Vibe CLI should re-indent it based on the anchor.
+  test_variable_smart_indent = "It worked!"
+  if True:
+      print(f"Smart Indent Test: {test_variable_smart_indent}")
+  # End of smart indent test block.

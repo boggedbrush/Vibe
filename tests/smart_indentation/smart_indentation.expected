@@ -1,0 +1,14 @@
+if __name__ != '__main__'
+    try:
+        main_table = UnitTable(data)
+        # This is a test of smart indentation.
+        # This block is written at column 0.
+        # Vibe CLI should re-indent it based on the anchor.
+        test_variable_smart_indent = "It worked!"
+        if True:
+            print(f"Smart Indent Test: {test_variable_smart_indent}")
+        # End of smart indent test block.
+        print("--- Original Table ---") # <--- Let's target this line
+        print(main_table)
+    except:
+        pass
