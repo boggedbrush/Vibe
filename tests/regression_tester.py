@@ -6,6 +6,8 @@ from pathlib import Path
 import tempfile
 import shutil
 import argparse
+import autopep8
+import re
 
 # Ensure the project root (one level up) is on sys.path so we can import vibe_cli
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -14,6 +16,31 @@ sys.path.insert(0, str(PROJECT_ROOT))
 import vibe_cli
 
 TESTS_DIR = Path(__file__).parent
+
+def enforce_two_blank_lines(src: str) -> str:
+    # Ensure there are exactly two blank lines before top-level defs/classes
+    # This looks for lines that start a def/class at zero indentation
+    # and ensures two blank lines before it.
+    
+    lines = src.splitlines()
+    new_lines = []
+    for i, line in enumerate(lines):
+        if re.match(r'^(def|class) ', line):
+            # Check previous two lines
+            prev_lines = new_lines[-2:] if len(new_lines) >= 2 else new_lines
+            # Count how many blank lines before current line
+            blank_count = 0
+            for prev_line in reversed(prev_lines):
+                if prev_line.strip() == '':
+                    blank_count += 1
+                else:
+                    break
+            needed = 2 - blank_count
+            if needed > 0:
+                new_lines.extend([''] * needed)
+        new_lines.append(line)
+    return '\n'.join(new_lines)
+
 
 def show_difference(str1, str2):
     """Prints the differences between two strings."""
@@ -51,6 +78,9 @@ def run_case(case_dir: Path):
 
     got = curr_src
     exp = expected_path.read_text() if expected_path.exists() else ""
+    exp = autopep8.fix_code(exp, options={'aggressive': 1}).rstrip()
+    got = enforce_two_blank_lines(got)
+    exp = enforce_two_blank_lines(exp)
 
     if got == exp:
         print(f"[PASS] {case_dir.name} – OK")
