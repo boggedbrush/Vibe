@@ -5,6 +5,7 @@ def greet(name):
 def farewell(name):
     print(f"Goodbye, {name}!")
 
+
 class Greeter:
     def greet(self):
         print("Greeter says hi!")

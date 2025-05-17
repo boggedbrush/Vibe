@@ -1,7 +1,8 @@
 # VibeSpec: 1.5
 
 # Replace the existing greet()
-patch_type: add_function
+patch_type: replace_function
+name: greet
 file: hello.py
 --- code: |
     def greet(name):

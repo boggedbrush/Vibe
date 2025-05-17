@@ -13,6 +13,118 @@ import yaml
 from textwrap import dedent
 import ast
 
+def insert_function_before_first_class(src: str, fn_code: str) -> str:
+    """
+    Insert fn_code before the first class definition in src.
+    If no class exists, append at EOF (with correct blank lines).
+    """
+    lines = src.splitlines()
+    try:
+        tree = ast.parse(src)
+        first_class = None
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                first_class = node
+                break
+        if first_class is not None:
+            insert_lineno = first_class.lineno - 1  # ast lineno is 1-based
+            # Ensure blank line before class if needed
+            if insert_lineno > 0 and lines[insert_lineno-1].strip() != "":
+                fn_code = "\n" + fn_code
+            lines = lines[:insert_lineno] + [fn_code, ""] + lines[insert_lineno:]
+        else:
+            # No classes, just append (with correct blank lines)
+            if lines and lines[-1].strip():
+                lines.append("")
+            lines.append(fn_code)
+            lines.append("")
+        return "\n".join(lines)
+    except Exception as e:
+        # Fallback: simple append
+        return src.rstrip() + "\n\n" + fn_code + "\n"
+
+def find_function_ranges(source):
+    """
+    Returns a dict mapping function name to (start_line, end_line),
+    including decorators, for all top-level functions in the file.
+    """
+    tree = ast.parse(source)
+    lines = source.splitlines()
+    fn_map = {}
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            # Find decorator range (if any)
+            start = node.lineno - 1
+            if node.decorator_list:
+                start = node.decorator_list[0].lineno - 1
+            # End line: last line of function body
+            end = max(getattr(child, 'end_lineno', node.lineno) for child in ast.walk(node)) - 1
+            fn_map[node.name] = (start, end)
+    return fn_map
+
+def patch_add_function(src, fn_code, fn_name=None):
+    """
+    If fn_name is provided, remove all existing top-level functions with that name (including decorators).
+    Insert fn_code as a new top-level function after last function, before first class, or at top/EOF.
+    Ensures only one blank line before/after as needed, and trims double-blank at the top.
+    """
+    src_lines = src.rstrip('\n').split('\n')
+    if fn_name:
+        # Remove all top-level defs with this name (including decorators)
+        module = ast.parse(src)
+        new_lines = src_lines.copy()
+        # Build ranges of (start,end) lines to remove
+        to_remove = []
+        for i, node in enumerate(module.body):
+            if isinstance(node, ast.FunctionDef) and node.name == fn_name:
+                # Find start, including any decorators above
+                start = node.lineno - 1
+                # Walk up to include decorators (they precede the def)
+                while start > 0 and re.match(r'^\s*@', src_lines[start-1]):
+                    start -= 1
+                # Remove the lines (inclusive)
+                end = node.end_lineno if hasattr(node, "end_lineno") else node.lineno
+                to_remove.append((start, end))
+        # Remove from bottom up to keep indices valid
+        for start, end in reversed(to_remove):
+            for j in range(end-1, start-1, -1):
+                new_lines[j] = None
+        src_lines = [l for l in new_lines if l is not None]
+    # Now: Insert new function as before
+    module = ast.parse('\n'.join(src_lines))
+    last_func_end = None
+    first_class_start = None
+    for node in module.body:
+        if isinstance(node, ast.FunctionDef):
+            end = node.end_lineno if hasattr(node, "end_lineno") else node.lineno
+            if last_func_end is None or end > last_func_end:
+                last_func_end = end
+        elif isinstance(node, ast.ClassDef):
+            if first_class_start is None or node.lineno < first_class_start:
+                first_class_start = node.lineno
+    # Prepare new function lines
+    fn_lines = fn_code.strip('\n').split('\n')
+    fn_lines.append("")
+    # Insertion point
+    if last_func_end is not None:
+        insert_at = last_func_end
+    elif first_class_start is not None:
+        insert_at = first_class_start - 1
+    else:
+        insert_at = len(src_lines)
+    if insert_at > 0 and src_lines[insert_at-1].strip() != '':
+        fn_lines = [''] + fn_lines
+    new_lines = src_lines[:insert_at] + fn_lines + src_lines[insert_at:]
+    # Remove double-blank at top
+    while len(new_lines) > 1 and new_lines[0].strip() == '' and new_lines[1].strip() == '':
+        new_lines.pop(0)
+    return '\n'.join(new_lines).rstrip() + '\n'
+
+def apply_patch_add_function(source, patch):
+    fn_code = patch['code']
+    fn_name = patch.get('name')
+    return patch_add_function(source, fn_code, fn_name)
+
 def get_function_extent_ast(src: str, function_name: str) -> Tuple[Optional[int], Optional[int]]:
     """
     Uses AST to find the start and end line numbers (1-indexed, inclusive)
@@ -734,12 +846,10 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
 
     # --- Patch Type Logic ---
     try:
-        # ... (Keep handlers for add_function, add_method, add_class) ...
         if pt == "add_function":
-            m = re.search(r"^\s*(?:async\s+)?def\s+([\w_]+)", block_content_from_patch, re.MULTILINE)
-            if not m: raise ValueError(f"add_function: Cannot find function name in code block.")
-            name_from_code = m.group(1)
-            new_src = _replace_function(src, name_from_code, block_content_from_patch)
+            fn_code = code  # This comes from the second argument to apply_patch
+            fn_name = meta.get('name')  # Optional, can be None
+            new_src = patch_add_function(src, fn_code, fn_name)
         elif pt == "add_method": 
             cls = meta.get("class")
             if not cls: raise ValueError("add_method requires 'class' metadata.")
