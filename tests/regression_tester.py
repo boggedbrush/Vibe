@@ -106,7 +106,11 @@ def main():
     for pass_fail, name in results:
         print(f"{['❌', '✅'][pass_fail]} {name}")
         n_pass += pass_fail
-    print(f"{n_pass}/{len(results)} tests passed.")
+    if n_pass == len(results):
+        print(f"{n_pass}/{len(results)} tests passed. 🎉")
+    else:
+        print(f"{n_pass}/{len(results)} tests passed. 😱")
+        
     if n_pass == len(results):
         sys.exit(0)
     else:
