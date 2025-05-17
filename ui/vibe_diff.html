@@ -7,24 +7,137 @@
     html, body { margin: 0; height: 100%; overflow: hidden; font-family: sans-serif; }
     body        { display: flex; flex-direction: column; }
     #toolbar    { display: flex; align-items: center; gap: 6px; padding: 8px; background: #add8e6; border-bottom: 1px solid #ccc; flex-wrap: wrap; }
-    /* Style for the filename display */
-    #currentFileNameDisplay { margin-left: 10px; font-weight: bold; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; /* Adjust max-width as needed */ }
+    #currentFileNameDisplay { margin-left: 10px; font-weight: bold; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; }
     #versionDisplay { margin-left: auto; font-style: italic; padding-right: 10px; white-space: nowrap; }
-    label { margin-left: 10px; } /* spacing for backup label */
-    input[type=number] { width: 50px; } /* specific width for backup input */
+    label { margin-left: 10px; }
+    input[type=number] { width: 50px; }
     button { cursor: pointer; }
 
-    /* main area: diff + dragH + patchContainer */
-    #main          { flex: 1 1 auto; display:flex; flex-direction:column; overflow:hidden; }
-    #diff          { flex: 1 1 auto; overflow:hidden; border: none; } /* Ensure no internal borders interfere */
-    #dragH         { flex: 0 0 5px; background:#ccc; cursor:row-resize; }
+    #main {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column; /* Toolbar, Tabs, Content Area */
+      overflow: hidden;
+    }
 
-    /* patch area row */
-    #patchContainer { flex: 0 1 200px; display:flex; border-top:1px solid #ccc; min-height: 80px; /* Ensure minimum height */ }
-    #patchBtns      { flex: 0 0 100px; display:flex; flex-direction:column; gap:4px; padding:4px; box-sizing:border-box; background:#f4f4f4; min-width: 60px; /* Ensure minimum width */ }
-    #patchBtns button{ width:100%; min-height:32px; cursor:pointer; }
-    #dragV          { flex:0 0 4px; background:#ccc; cursor:col-resize; }
-    #patchEditor    { flex:1 1 auto; min-width: 100px; /* Ensure editor has minimum width */ }
+    /* --- Tab Navigation --- */
+    #tab-nav {
+      display: flex;
+      flex-shrink: 0; /* Prevent tabs from shrinking */
+      border-bottom: 1px solid #ccc;
+      padding: 5px 5px 0 5px;
+      background-color: #f0f0f0; /* Light grey background */
+    }
+    .tab-button {
+      padding: 8px 15px;
+      border: 1px solid #ccc;
+      border-bottom: none; /* Remove bottom border */
+      margin-right: 4px;
+      background-color: #e9e9e9; /* Slightly darker inactive */
+      cursor: pointer;
+      border-radius: 4px 4px 0 0;
+      font-size: 0.9em;
+      position: relative;
+      bottom: -1px; /* Align with content border */
+    }
+    .tab-button.active {
+      background-color: #fff; /* White active tab */
+      border-bottom: 1px solid #fff; /* Hide bottom border matching content area */
+      font-weight: bold;
+    }
+
+    /* --- Tab Content Area --- */
+    #tab-content-area {
+      flex: 1 1 auto; /* Takes remaining vertical space */
+      overflow: hidden; /* Hide overflow */
+      position: relative;
+      background-color: #fff; /* White background */
+      border-top: 1px solid #ccc; /* Separator, matches tab bottom for active */
+    }
+    .tab-pane {
+      display: none; /* Hide inactive panes */
+      width: 100%;
+      height: 100%; /* Fill the content area */
+      box-sizing: border-box;
+      overflow: hidden; /* Prevent scrollbars on pane itself */
+    }
+    .tab-pane.active {
+      display: flex; /* Use flex for the active pane's layout */
+    }
+
+    /* --- Diff Tab Content --- */
+    #diff-tab-content {
+       flex-direction: column; /* Stack children vertically (only child is #diff) */
+    }
+    #diff { /* Diff editor takes all space in its tab */
+        flex: 1 1 auto;
+        overflow: hidden;
+        border: none;
+    }
+
+    /* --- LLM Patch Tab Content --- */
+    #llm-patch-tab-content {
+        flex-direction: column; /* Stack children vertically (only child is #patchContainer) */
+        overflow: hidden;
+    }
+    #patchContainer { /* Container for prompt/patch side-by-side */
+        flex: 1 1 auto; /* Takes all space within its tab pane */
+        display: flex;
+        flex-direction: row;
+        gap: 5px;
+        padding: 5px;
+        box-sizing: border-box;
+        overflow: hidden;
+        border: none;
+        min-height: 150px; /* Minimum size */
+    }
+    .prompt-section,
+    .patch-section {
+        flex: 1; /* Share horizontal space */
+        display: flex;
+        min-width: 150px; /* Minimum width for each section */
+        overflow: hidden; /* Prevent content from overflowing sections */
+    }
+    .prompt-section {
+        flex-direction: column; /* Stack label, textarea, button, status vertically */
+        padding-right: 5px; /* Spacing from vertical drag bar */
+    }
+    .prompt-section label {
+        margin-left: 0; margin-bottom: 4px; font-weight: bold; flex-shrink: 0;
+    }
+    .prompt-section textarea {
+        flex-grow: 1; width: 100%; box-sizing: border-box; resize: vertical;
+        margin-bottom: 4px; min-height: 50px;
+    }
+    .prompt-section button {
+        padding: 6px 10px; align-self: flex-start; margin-top: auto; /* Pushes button to bottom */
+        margin-bottom: 2px; flex-shrink: 0;
+    }
+    #llm-status {
+        margin-top: 2px; font-style: italic; color: grey; font-size: 0.9em;
+        min-height: 1.1em; flex-shrink: 0;
+    }
+    .patch-section {
+        flex-direction: row; /* Layout: Buttons | Drag | Editor */
+        padding-left: 5px; /* Spacing from vertical drag bar */
+    }
+    #patchBtns {
+        flex: 0 0 100px; display:flex; flex-direction:column; gap:4px; padding:4px;
+        box-sizing:border-box; background:#f4f4f4; min-width: 60px;
+    }
+    #patchBtns button {
+        width:100%; min-height:32px; cursor:pointer;
+    }
+    #dragV {
+        flex:0 0 4px; background:#ccc; cursor:col-resize;
+    }
+    #patchEditor {
+        flex-grow: 1; /* Takes remaining horizontal space */
+        min-width: 100px;
+        height: 100%; /* Fill vertical space of .patch-section */
+        overflow: hidden; /* Monaco handles internal scroll */
+    }
+
   </style>
   <!-- Monaco Loader -->
   <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs/loader.js"></script>
@@ -32,63 +145,75 @@
 <body>
   <div id="toolbar">
     <button id="loadFileBtn" title="Load a different Python file manually">Load File</button>
-    <!-- *** ADDED SPAN for filename *** -->
     <span id="currentFileNameDisplay" title="Currently loaded file">No file loaded</span>
-    <!-- *** END ADDED SPAN *** -->
     <button id="loadPatchBtn" title="Load a .vibe patch file" disabled>Load Patch</button>
-    <button id="acceptBtn" title="Apply changes from right pane and save as new Head" disabled>Apply</button> <!-- Title changed from Accept -->
+    <button id="acceptBtn" title="Apply changes from right pane and save as new Head" disabled>Apply</button>
     <button id="prevBtn" title="View previous version or cancel preview" disabled>Previous</button>
     <button id="nextBtn" title="View next version (towards Head)" disabled>Next</button>
     <button id="copyPromptBtn" title="Copy Vibe System Prompt to clipboard">Copy Prompt</button>
     <label for="backupLimitInput">Backups:</label>
     <input type="number" id="backupLimitInput" value="20" min="0" title="Max backups to keep (0=unlimited)">
     <div id="versionDisplay">Head</div>
-    <!-- Hidden file inputs -->
     <input type="file" id="fileInput1" accept=".py" style="display:none" />
     <input type="file" id="fileInput2" accept=".vibe,.txt" style="display:none" />
   </div>
 
   <div id="main">
-    <div id="diff"></div>
-    <div id="dragH"></div>
-    <div id="patchContainer">
-      <div id="patchBtns">
-        <button id="clearPatchBtn" title="Clear patch text and revert preview">Clear</button>
-        <button id="applyPatchBtn" title="Preview changes from patch editor" disabled>Preview Patch</button>
+    <div id="tab-nav">
+      <button class="tab-button active" data-tab="diff-tab-content">Diff View</button>
+      <button class="tab-button" data-tab="llm-patch-tab-content">LLM Patch</button>
+    </div>
+    <div id="tab-content-area">
+      <div id="diff-tab-content" class="tab-pane active">
+        <div id="diff"></div>
       </div>
-      <div id="dragV"></div>
-      <div id="patchEditor"></div>
+      <div id="llm-patch-tab-content" class="tab-pane">
+        <div id="patchContainer">
+          <div class="prompt-section">
+            <label for="llm-prompt-input">LLM Prompt:</label>
+            <textarea id="llm-prompt-input" placeholder="Describe the patch you want..."></textarea>
+            <button id="generate-patch-btn">Generate Patch</button>
+            <div id="llm-status"></div>
+          </div>
+          <div class="patch-section">
+            <div id="patchBtns">
+              <button id="clearPatchBtn" title="Clear patch text and revert preview">Clear</button>
+              <button id="applyPatchBtn" title="Preview changes from patch editor" disabled>Preview Patch</button>
+            </div>
+            <div id="dragV"></div>
+            <div id="patchEditor"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Main script using Monaco loader -->
   <script>
     require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs' } });
-    // Server might inject initial file config here AFTER the config script
-    // <script>window.INITIAL_FILE = 'some_file.py'; console.log('Injected INITIAL_FILE:', window.INITIAL_FILE);</script>
   </script>
   <script>
-    // Main application logic, runs after Monaco environment is loaded
     require(['vs/editor/editor.main'], () => {
-      // --- Query Selectors ---
       const qs = id => document.getElementById(id);
       const loadFileBtn    = qs('loadFileBtn');
+      const currentFileNameDisplay = qs('currentFileNameDisplay');
       const loadPatchBtn   = qs('loadPatchBtn');
-      const applyBtnToolbar= qs('acceptBtn'); // Toolbar button (was 'acceptBtn')
+      const applyBtnToolbar= qs('acceptBtn');
       const prevBtn        = qs('prevBtn');
       const nextBtn        = qs('nextBtn');
-      const clearBtnPatchArea = qs('clearPatchBtn');
-      const previewBtnPatchArea = qs('applyPatchBtn'); // Patch area button
-      const versionDisplay = qs('versionDisplay');
       const copyPromptBtn  = qs('copyPromptBtn');
       const backupLimitInput = qs('backupLimitInput');
+      const versionDisplay = qs('versionDisplay');
       const fileInput1     = qs('fileInput1');
       const fileInput2     = qs('fileInput2');
+
       const diffContainer  = qs('diff');
       const patchEditorContainer = qs('patchEditor');
-      const currentFileNameDisplay = qs('currentFileNameDisplay'); // Selector for the new span
+      const llmPromptInput = qs('llm-prompt-input');
+      const generatePatchBtn = qs('generate-patch-btn');
+      const llmStatusDiv = qs('llm-status');
+      const clearBtnPatchArea = qs('clearPatchBtn');
+      const previewBtnPatchArea = qs('applyPatchBtn');
 
-      // --- Monaco Editor Instances ---
       let diffEditor;
       let patchEditor;
       try {
@@ -97,36 +222,123 @@
            patchEditor = monaco.editor.create(patchEditorContainer, { language: 'yaml', theme: 'vs', automaticLayout: true, minimap: { enabled: false } });
       } catch (e) {
           console.error("Failed to initialize Monaco editors:", e); alert("Error initializing code editors.");
-          document.querySelectorAll('#toolbar button, #patchBtns button').forEach(btn => btn.disabled = true); return;
+          document.querySelectorAll('#toolbar button, #patchBtns button, .tab-button').forEach(btn => btn.disabled = true); return;
       }
 
-      // --- State Variables ---
-      let headText = '';          // Content of the current file (HEAD or original for preview)
-      let compareText = '';       // Content being compared against headText (a version, or patch preview result)
-      let patchText = '';         // Content of the patch editor
-      let currentFile = '';       // Filename currently loaded (used for fetching versions, base for comparison)
-      let versions = [];          // Array of {sha, date, type} from /versions
-      let versionIndex = 0;       // Index into versions array (versions.length means HEAD)
-      let previewActive = false;    // Is the right pane showing a patch preview?
-      let previewTargetFile = ''; // Filename that the current preview content corresponds to (might differ from currentFile)
+      let headText = '';
+      let compareText = '';
+      let patchText = '';
+      let currentFile = '';
+      let versions = [];
+      let versionIndex = 0;
+      let previewActive = false;
+      let previewTargetFile = '';
 
-      // --- Core Functions ---
+      const tabButtons = document.querySelectorAll('.tab-button');
+      const tabPanes = document.querySelectorAll('.tab-pane');
+
+      tabButtons.forEach(button => {
+          button.addEventListener('click', () => {
+              tabButtons.forEach(btn => btn.classList.remove('active'));
+              tabPanes.forEach(pane => pane.classList.remove('active'));
+              button.classList.add('active');
+              const targetTabPaneId = button.getAttribute('data-tab');
+              const targetPane = document.getElementById(targetTabPaneId);
+              if (targetPane) {
+                  targetPane.classList.add('active');
+                  if (targetTabPaneId === 'diff-tab-content' && diffEditor) {
+                      diffEditor.layout();
+                  } else if (targetTabPaneId === 'llm-patch-tab-content' && patchEditor) {
+                      patchEditor.layout();
+                  }
+              }
+          });
+      });
+
+      const checkLlmAvailability = async () => {
+          if (!generatePatchBtn || !llmPromptInput || !llmStatusDiv) {
+              console.warn("LLM UI elements for status check not found.");
+              return;
+          }
+          try {
+              const response = await fetch('/llm/status');
+              if (!response.ok) {
+                  throw new Error(`HTTP error fetching LLM status: ${response.status}`);
+              }
+              const data = await response.json();
+              if (data.configured === true) {
+                  generatePatchBtn.disabled = false;
+                  llmPromptInput.disabled = false;
+                  if (llmStatusDiv.textContent.includes("not available") || llmStatusDiv.textContent.includes("Error checking")) {
+                     llmStatusDiv.textContent = "";
+                  }
+              } else {
+                  generatePatchBtn.disabled = true;
+                  llmPromptInput.disabled = true;
+                  llmStatusDiv.textContent = "LLM generation is not available on the server.";
+                  console.warn("LLM generation disabled: Server reports not configured.");
+              }
+          } catch (error) {
+              console.error("Failed to check LLM availability:", error);
+              generatePatchBtn.disabled = true;
+              llmPromptInput.disabled = true;
+              llmStatusDiv.textContent = "Error checking LLM availability.";
+          }
+      };
+
+      if (generatePatchBtn && llmPromptInput && llmStatusDiv && patchEditor) {
+          generatePatchBtn.addEventListener('click', async () => {
+              const userPrompt = llmPromptInput.value.trim();
+              if (!userPrompt) {
+                  llmStatusDiv.textContent = 'Please enter a prompt.';
+                  return;
+              }
+              patchEditor.setValue('');
+              llmStatusDiv.textContent = 'Generating patch...';
+              generatePatchBtn.disabled = true;
+              llmPromptInput.disabled = true;
+              try {
+                  const payload = {
+                      prompt: userPrompt,
+                      filename: currentFile || "",
+                      file_content: headText || ""
+                  };
+                  console.log("Sending to /generate-patch:", payload);
+
+                  const response = await fetch('/generate-patch', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify(payload),
+                  });
+                  const data = await response.json();
+                  if (!response.ok) {
+                      throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                  }
+                  patchEditor.setValue(data.patch_content || '# No content received.');
+                  llmStatusDiv.textContent = 'Patch generated.';
+              } catch (error) {
+                  console.error('Error generating patch:', error);
+                  llmStatusDiv.textContent = `Error: ${error.message}`;
+                  patchEditor.setValue(`# Error generating patch:\n# ${error.message}`);
+              } finally {
+                  await checkLlmAvailability();
+                  if (!generatePatchBtn.disabled) {
+                    llmPromptInput.disabled = false;
+                  }
+                  updateNav();
+              }
+          });
+      } else {
+          console.warn("One or more LLM UI elements not found for binding click event, or button is disabled.");
+          if (generatePatchBtn) generatePatchBtn.disabled = true;
+      }
+
       const setDiff = (orig, mod) => {
         if (!diffEditor) return;
-        // console.log("Setting diff view...");
         try {
-            // Use replaceModels to avoid flicker if models already exist
             diffEditor.getModel()?.original.setValue(orig ?? '');
             diffEditor.getModel()?.modified.setValue(mod ?? '');
-
-            // Force Layout Recalculation
-            setTimeout(() => {
-                if (diffEditor) {
-                   diffEditor.layout();
-                   // console.log("Forced diffEditor.layout().");
-                }
-            }, 0);
-             // console.log("Diff model set/updated.");
+            setTimeout(() => { if (diffEditor) diffEditor.layout(); }, 0);
         } catch (e) {
             console.error("Error setting diff model:", e);
             toast("Error updating the diff view.", "error");
@@ -135,251 +347,156 @@
 
       const toast = (msg, level = 'error') => {
         if (console && console[level]) { console[level](msg); } else { console.log(`[${level}] ${msg}`); }
-        // Simple alert for now, replace with a proper toast notification library if desired
         alert(msg);
       };
 
+      (function(){
+        let startX, startW; const dragV = qs('dragV'); const btns = qs('patchBtns');
+        const patchCont = qs('patchContainer');
+        if (!dragV || !btns || !patchCont || !dragV.parentElement || dragV.parentElement.parentElement !== patchCont) {
+             return;
+        }
+        dragV.addEventListener('mousedown', e => {
+            startX = e.clientX; startW = btns.offsetWidth;
+            document.body.style.cursor = 'col-resize';
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onUp);
+        });
+        function onMove(e) {
+            const delta = e.clientX - startX;
+            const patchContainerWidth = patchCont.offsetWidth;
+            const minEditorWidth = 100 + 4;
+            const newW = Math.min(patchContainerWidth - minEditorWidth, Math.max(60, startW + delta));
+            btns.style.flexBasis = newW + 'px';
+        }
+        function onUp() {
+            document.body.style.cursor = '';
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        }
+      })();
 
-      // --- Draggable Dividers ---
-      (function(){ // Horizontal Drag Logic
-        let startY, startH; const dragH = qs('dragH'); const patchCont = qs('patchContainer'); const mainCont = qs('main');
-        dragH.addEventListener('mousedown', e => { startY = e.clientY; startH = patchCont.offsetHeight; document.body.style.cursor = 'row-resize'; window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); });
-        function onMove(e) { const delta = e.clientY - startY; const mainHeight = mainCont.offsetHeight; const newH = Math.min(mainHeight - 50, Math.max(80, startH - delta)); patchCont.style.flexBasis = newH + 'px'; }
-        function onUp() { document.body.style.cursor = ''; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); } })();
-      (function(){ // Vertical Drag Logic
-        let startX, startW; const dragV = qs('dragV'); const btns = qs('patchBtns'); const patchCont = qs('patchContainer');
-        dragV.addEventListener('mousedown', e => { startX = e.clientX; startW = btns.offsetWidth; document.body.style.cursor = 'col-resize'; window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp); });
-        function onMove(e) { const delta = e.clientX - startX; const patchWidth = patchCont.offsetWidth; const newW = Math.min(patchWidth - 50, Math.max(60, startW + delta)); btns.style.flexBasis = newW + 'px'; }
-        function onUp() { document.body.style.cursor = ''; window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); } })();
-
-
-      // --- UI State Management ---
       const updateNav = () => {
-        if (!patchEditor || !currentFileNameDisplay) return; // Ensure elements exist
-        patchText = patchEditor.getValue() ?? ''; // Ensure patchText is up-to-date
+        if (!patchEditor || !currentFileNameDisplay) return;
+        patchText = patchEditor.getValue() ?? '';
         const isAtHead = versionIndex === versions.length;
         const hasVersions = versions.length > 0;
         const hasPatchText = patchText.trim().length > 0;
-        const changesExist = compareText !== headText; // Are the two panes different?
+        const changesExist = compareText !== headText;
 
-        // *** Update filename display ***
         currentFileNameDisplay.textContent = currentFile || 'No file loaded';
-        currentFileNameDisplay.title = currentFile || 'No file loaded'; // Set title for hover
+        currentFileNameDisplay.title = currentFile || 'No file loaded';
 
-        // --- Button States ---
-        // Load File button should generally be enabled
-        loadFileBtn.disabled = false; // Explicitly enable here
-
-        // Previous button: Enabled if preview is active OR if not at the oldest version
-        prevBtn.disabled = !(previewActive || (hasVersions && versionIndex > 0));
-        // Next button: Enabled if NOT in preview, versions exist, AND not at HEAD
+        loadFileBtn.disabled = false;
+        prevBtn.disabled = !(previewActive || (hasVersions && (versionIndex === versions.length || versionIndex < versions.length - 1)));
         nextBtn.disabled = !( !previewActive && hasVersions && !isAtHead );
-        // Toolbar Apply: Enabled if the two panes show different content
         applyBtnToolbar.disabled = !changesExist;
-        // Load Patch: Enabled if a file is loaded
         loadPatchBtn.disabled = !currentFile;
-        // Patch Area Preview: Enabled if patch editor has text
         previewBtnPatchArea.disabled = !hasPatchText;
-        // Patch Area Clear: Enabled if patch editor has text
         clearBtnPatchArea.disabled = !hasPatchText;
 
-        // Update Version Display Text
         let versionLabel = 'Head';
         if (previewActive) {
-            versionLabel = `Preview (${previewTargetFile || 'new file'})`; // Show target file in preview
+            versionLabel = `Preview (${previewTargetFile || 'new file'})`;
         } else if (!isAtHead && versions[versionIndex]) {
             const ver = versions[versionIndex];
             const shortSha = (ver.type === 'backup') ? ver.sha : (ver.sha?.substring(0, 7) || 'Unknown');
             versionLabel = `${ver.type || 'Ver'} ${shortSha}`;
         }
         versionDisplay.textContent = versionLabel;
-        // console.log(`updateNav: file='${currentFile}', target='${previewTargetFile}', index=${versionIndex}, preview=${previewActive}, changes=${changesExist}, patch=${hasPatchText}, apply=${applyBtnToolbar.disabled}`);
       };
 
-      // --- Data Fetching Functions ---
       const fetchVersions = async () => {
-        if (!currentFile) { console.warn("fetchVersions called with no currentFile."); versions = []; versionIndex = 0; updateNav(); return; }
-        console.log(`Fetching versions for: ${currentFile}`);
+        if (!currentFile) { versions = []; versionIndex = 0; updateNav(); return; }
         try {
           const r = await fetch(`/versions?file=${encodeURIComponent(currentFile)}`);
           if (!r.ok) throw new Error(`HTTP ${r.status} fetching versions: ${await r.text()}`);
           versions = await r.json() || [];
-          versions.sort((a, b) => (b.date || '').localeCompare(a.date || '')); // Sort newest first
-          console.log(`Received ${versions.length} versions for ${currentFile}.`);
+          versions.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
         } catch (e) {
-          toast(`Failed to fetch versions: ${e.message}`, 'warn');
-          versions = [];
+          toast(`Failed to fetch versions: ${e.message}`, 'warn'); versions = [];
         }
-        versionIndex = versions.length; // Default view to HEAD
-        updateNav();
+        versionIndex = versions.length; updateNav();
       };
       const loadFileContent = async (filename) => {
           if (!filename) { toast('No file specified to load.', 'error'); return null; }
-          console.log(`Loading content for: ${filename}`);
           try {
             const r = await fetch(`/file?file=${encodeURIComponent(filename)}`);
-            // Handle 404 specifically maybe? For now, non-ok is an error.
             if (!r.ok) throw new Error(`HTTP ${r.status} loading file: ${await r.text()}`);
             return await r.text();
-           } catch (e) {
-            toast(`Failed to load file '${filename}': ${e.message}`, 'error');
-            return null;
-           }
+           } catch (e) { toast(`Failed to load file '${filename}': ${e.message}`, 'error'); return null; }
       };
       const loadVersionContent = async (filename, sha) => {
            if (!filename || !sha) { toast('File or Version SHA missing.', 'error'); return null; }
-           console.log(`Loading version '${sha}' for: ${filename}`);
            try {
             const r = await fetch(`/version?file=${encodeURIComponent(filename)}&sha=${encodeURIComponent(sha)}`);
             if (!r.ok) throw new Error(`HTTP ${r.status} loading version: ${await r.text()}`);
             return await r.text();
-           } catch (e) {
-            toast(`Failed to load version ${sha}: ${e.message}`, 'error');
-            return null;
-           }
+           } catch (e) { toast(`Failed to load version ${sha}: ${e.message}`, 'error'); return null; }
       };
 
-      // --- UI Action Handlers ---
       const loadHeadState = async () => {
           if (!currentFile) return;
-          console.log(`Loading HEAD state for: ${currentFile}`);
           const content = await loadFileContent(currentFile);
           if (content !== null) {
-              headText = content;
-              compareText = content;    // Right pane matches left for HEAD
+              headText = content; compareText = content;
               setDiff(headText, compareText);
-              previewActive = false;
-              previewTargetFile = currentFile; // When viewing HEAD, preview target matches
-              versionIndex = versions.length; // Point index to HEAD
-              updateNav();
-          } else {
-              toast(`Failed to load HEAD content for ${currentFile}.`, 'error');
-              // Clear state? Or just leave as is? Leaving as is for now.
-          }
+              previewActive = false; previewTargetFile = currentFile;
+              versionIndex = versions.length; updateNav();
+          } else { toast(`Failed to load HEAD content for ${currentFile}.`, 'error'); }
       };
-      const loadVersionState = async (index) => {
-          if (index < 0 || index >= versions.length || !versions[index]) {
-              console.warn(`loadVersionState called with invalid index ${index}`);
-              return;
-          }
-          if (!currentFile) { console.error("loadVersionState called with no currentFile."); return; }
+const loadVersionState = async (index) => {
+    if (index < 0 || index >= versions.length || !versions[index] || !currentFile) return;
+    const version = versions[index]; const sha = version.sha;
+    const currentHeadContent = await loadFileContent(currentFile);
+    if (currentHeadContent === null) { toast(`Failed to reload HEAD for version ${sha}.`, 'error'); return; }
+    headText = currentHeadContent;
+    const versionContent = await loadVersionContent(currentFile, sha);
+    if (versionContent !== null) {
+        compareText = versionContent; setDiff(headText, compareText);
+        previewActive = false; previewTargetFile = currentFile;
+        versionIndex = index; updateNav();
+    } else { toast(`Failed to load content for version ${sha}.`, 'error'); await loadHeadState(); }
+};
 
-          const version = versions[index];
-          const sha = version.sha;
-          console.log(`Loading version state: Index ${index}, SHA ${sha}, File: ${currentFile}`);
-
-          // Always get the latest HEAD content for the left pane
-          const currentHeadContent = await loadFileContent(currentFile);
-          if (currentHeadContent === null) {
-              toast(`Failed to reload HEAD content while loading version ${sha}.`, 'error');
-              return; // Abort if we can't get the base for comparison
-          }
-          headText = currentHeadContent;
-
-          // Get the specific version's content for the right pane
-          const versionContent = await loadVersionContent(currentFile, sha);
-          if (versionContent !== null) {
-              compareText = versionContent;
-              setDiff(headText, compareText);
-              previewActive = false;
-              previewTargetFile = currentFile; // When viewing a version, preview target matches
-              versionIndex = index;
-              updateNav();
-          } else {
-              toast(`Failed to load content for version ${sha}.`, 'error');
-              // Revert to HEAD view? Or stay in broken state? Revert to HEAD.
-              await loadHeadState();
-          }
-      };
-
-      // Preview Patch Handler (handles target filename)
       const previewPatch = async () => {
         patchText = patchEditor.getValue() ?? '';
         if (!patchText.trim()) {
-            // If clearing preview, revert to the underlying state (HEAD or version)
-            console.log("Patch text empty, clearing preview state.");
-            if (versionIndex === versions.length) {
-                await loadHeadState(); // Revert to HEAD
-            } else {
-                await loadVersionState(versionIndex); // Revert to current version index
-            }
-            return; // Exit early
+            if (versionIndex === versions.length) await loadHeadState(); else await loadVersionState(versionIndex);
+            return;
         }
-
         if (!currentFile) { toast("Cannot preview patch, no base file loaded.", 'warn'); return; }
-
-        console.log("Applying patch preview...");
+        console.log("previewPatch: currentFile =", currentFile);
+        console.log("previewPatch: patchText being sent to /apply:\n", patchText);
         try {
-          // Fetch current HEAD content *before* applying patch for left pane
           const currentHeadContent = await loadFileContent(currentFile);
-          if (currentHeadContent === null) {
-              toast(`Could not get current file content for preview comparison.`, 'warn');
-              headText = ''; // Use empty if fetch fails
-          } else {
-              headText = currentHeadContent;
-          }
-
-          // Send patch to server for simulation
+          headText = currentHeadContent ?? '';
           const response = await fetch('/apply', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ patch: patchText, file: currentFile }) // Send original file context
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ patch: patchText, file: currentFile })
           });
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-          }
-
-          const results = await response.json(); // Expects {"filename": "content", ...}
-
-          if (!results || typeof results !== 'object' || Object.keys(results).length === 0) {
-             throw new Error("Invalid or empty response from /apply endpoint.");
-          }
-
-          // Determine the target file and content from the response
-          let targetFile = '';
-          let appliedContent = '';
+          if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+          const results = await response.json();
+          if (!results || typeof results !== 'object' || Object.keys(results).length === 0) throw new Error("Invalid patch response.");
           const resultFiles = Object.keys(results);
-
-          if (resultFiles.length === 1) {
-              // Most common case: patch affected one file
-              targetFile = resultFiles[0];
-              appliedContent = results[targetFile];
-          } else {
-              // If multiple files returned, which one to show?
-              // Strategy: If original currentFile is in results, use that. Otherwise, use the first one.
-              if (results.hasOwnProperty(currentFile)) {
-                  targetFile = currentFile;
-                  appliedContent = results[targetFile];
-                  console.warn("Patch affected multiple files, showing result for original file:", currentFile);
-              } else {
-                  targetFile = resultFiles[0];
-                  appliedContent = results[targetFile];
-                  console.warn(`Patch affected multiple files (${resultFiles.join(', ')}), showing result for first file:`, targetFile);
-              }
-              // A more sophisticated UI might list all affected files.
+          let targetFile = resultFiles[0]; let appliedContent = results[targetFile];
+          if (resultFiles.length > 1 && results.hasOwnProperty(currentFile)) {
+              targetFile = currentFile; appliedContent = results[currentFile];
           }
+          if (typeof appliedContent !== 'string') throw new Error("Patch content not string.");
+          compareText = appliedContent; previewTargetFile = targetFile; previewActive = true;
+          setDiff(headText, compareText); updateNav();
 
-          if (typeof appliedContent !== 'string') {
-             throw new Error("Patch response content was not a string.");
+          const diffViewTabButton = document.querySelector('.tab-button[data-tab="diff-tab-content"]');
+          if (diffViewTabButton && !diffViewTabButton.classList.contains('active')) {
+              diffViewTabButton.click();
+          } else if (diffViewTabButton && diffViewTabButton.classList.contains('active')) {
+              if (diffEditor) diffEditor.layout();
           }
-
-          // Update state for preview
-          compareText = appliedContent;       // Right pane shows patched content
-          previewTargetFile = targetFile;     // Store the actual target file name
-          previewActive = true;               // Set preview flag
-          setDiff(headText, compareText);     // Update the diff view
-          updateNav();                        // Update button states etc.
-          console.log(`Preview active for target file: ${previewTargetFile}`);
-
-        } catch(e) {
-            toast(`Patch preview failed: ${e.message}`, 'error');
-            // Optionally revert view if preview fails? For now, just show error.
-        }
+        } catch(e) { toast(`Patch preview failed: ${e.message}`, 'error'); }
       };
 
       copyPromptBtn.onclick = () => {
-          // Make sure to escape backticks and potentially other special characters
           const systemPromptText = `# VibePatchGPT System Prompt
 
 You are **VibePatchGPT**, an assistant that speaks **only** in valid Vibe Patch files. You support **VibeSpec v1.6** (multi‑patch bundles and decorator handling) and all patch types from v1.4+. When the user asks for a patch, output **only** the \`.vibe\` YAML+code content—no explanations, no extra text. Always provide patches in a yaml code block.
@@ -423,249 +540,115 @@ You are **VibePatchGPT**, an assistant that speaks **only** in valid Vibe Patch 
 ---
 
 Always output only the patch YAML content. No extra text.
-`; // End of systemPromptText string
-
+`;
           navigator.clipboard.writeText(systemPromptText)
-            .then(() => { console.log('System prompt copied.'); /* Maybe a visual confirmation? */ })
+            .then(() => console.log('System prompt copied.'))
             .catch(err => toast('Failed to copy prompt: ' + err, 'error'));
       };
 
-       // --- Autoload Initial File Logic ---
        const loadInitialFile = async () => {
-           console.log("Attempting initial file autoload...");
            if (typeof window.INITIAL_FILE === 'string' && window.INITIAL_FILE) {
-               const initialFilename = window.INITIAL_FILE;
-               console.log("Found INITIAL_FILE hint:", initialFilename);
-               // qs('loadFileBtn').disabled = true; // *** REMOVED THIS LINE ***
-               currentFile = initialFilename;
-               previewTargetFile = currentFile; // Initialize preview target
-               console.log(`Set currentFile = '${currentFile}'`);
+               currentFile = window.INITIAL_FILE; previewTargetFile = currentFile;
                const initialContent = await loadFileContent(currentFile);
                if (initialContent !== null) {
-                   console.log("Initial content loaded successfully.");
-                   headText = initialContent;
-                   compareText = initialContent;
-                   setDiff(headText, compareText);
-                   patchEditor.setValue('');
-                   previewActive = false;
-                   loadPatchBtn.disabled = false; // Enable loading patches now
-                   console.log("Fetching initial versions...");
-                   await fetchVersions(); // Fetch versions AFTER setting currentFile
-                   console.log("Initial setup complete with file:", currentFile);
+                   headText = initialContent; compareText = initialContent;
+                   setDiff(headText, compareText); patchEditor.setValue(''); previewActive = false;
+                   loadPatchBtn.disabled = false; await fetchVersions();
                } else {
-                   console.error(`Failed initial load of file content: '${initialFilename}'.`);
-                   toast(`Error autoloading specified file '${initialFilename}'. Please load manually.`, 'error');
-                   // Reset state fully if autoload fails
+                   toast(`Error autoloading '${currentFile}'. Load manually.`, 'error');
                    currentFile = headText = compareText = previewTargetFile = '';
-                   versions = []; versionIndex = 0; previewActive = false;
-                   loadPatchBtn.disabled = true;
-                   setDiff('', ''); // Clear diff view
-                   // qs('loadFileBtn').disabled = false; // Ensure enabled on failure (handled by updateNav now)
-                   updateNav(); // Update UI state
+                   versions = []; versionIndex = 0; previewActive = false; loadPatchBtn.disabled = true;
+                   setDiff('', ''); updateNav();
                }
-           } else {
-               console.log("No INITIAL_FILE hint found. UI ready for manual file load.");
-               updateNav(); // Update UI with default disabled states
-           }
-           // Ensure load file button is enabled after initial attempt, regardless of success/failure
-           // It's now handled within updateNav()
+           } else { updateNav(); }
            updateNav();
        };
 
-      // --- Initial State Setup ---
-      patchEditor.setValue(''); // Start with empty patch editor
-
-      // --- UI Event Bindings ---
-      // File Loading (Manual)
+      patchEditor.setValue('');
       loadFileBtn.onclick = () => fileInput1.click();
       fileInput1.onchange = async e => {
-          const f = e.target.files[0];
-          if (!f) return;
-          const manualFilename = f.name;
-          console.log("Manual file selection:", manualFilename);
+          const f = e.target.files[0]; if (!f) return;
           try {
-            const text = await f.text();
-            currentFile = manualFilename;
-            previewTargetFile = currentFile; // Reset preview target
-            headText = text;
-            compareText = text;
-            patchEditor.setValue(''); // Clear any old patch
-            previewActive = false;
-            setDiff(headText, headText);
-            loadPatchBtn.disabled = false; // Enable patch loading
-            await fetchVersions(); // Fetch versions for the newly loaded file
+            const text = await f.text(); currentFile = f.name; previewTargetFile = currentFile;
+            headText = text; compareText = text; patchEditor.setValue(''); previewActive = false;
+            setDiff(headText, headText); loadPatchBtn.disabled = false; await fetchVersions();
           } catch (err) {
             toast(`Error loading selected file: ${err.message}`, 'error');
-            // Reset state on failure
-            currentFile = headText = compareText = previewTargetFile = '';
-            versions = []; versionIndex = 0; previewActive = false; loadPatchBtn.disabled = true;
-            setDiff('', '');
-            updateNav();
-          } finally {
-            e.target.value = null; // Reset file input
-          }
+            currentFile = headText = compareText = previewTargetFile = ''; versions = []; versionIndex = 0;
+            previewActive = false; loadPatchBtn.disabled = true; setDiff('', ''); updateNav();
+          } finally { e.target.value = null; }
       };
-      // Patch Loading
       loadPatchBtn.onclick = () => { if (!loadPatchBtn.disabled) fileInput2.click(); };
       fileInput2.onchange = async e => {
           const f = e.target.files[0]; if (!f) return;
-          console.log("Patch file selected:", f.name);
           try {
-            const txt = await f.text();
-            patchEditor.setValue(txt); // Set editor content first
-            updateNav(); // Update button states based on new patch text
-            await previewPatch(); // Automatically preview after loading patch
-          } catch (err) {
-            console.error("Error loading patch file:", err);
-            toast(`Error loading patch file: ${err.message}`, 'error');
-          } finally {
-            e.target.value = null; // Reset file input
-          }
+            const txt = await f.text(); patchEditor.setValue(txt); updateNav(); await previewPatch();
+          } catch (err) { toast(`Error loading patch file: ${err.message}`, 'error'); }
+          finally { e.target.value = null; }
       };
-      // Patch Editor Change Detection
-      let patchChangeTimeout;
-      patchEditor.onDidChangeModelContent(() => {
-        clearTimeout(patchChangeTimeout);
-        // Update nav immediately for button states. User must click Preview explicitly.
-        updateNav();
-      });
-      // Patch Area Buttons
+      patchEditor.onDidChangeModelContent(() => { updateNav(); });
+
       clearBtnPatchArea.onclick = () => {
-          console.log("Patch Clear button clicked.");
           patchEditor.setValue('');
-          // If a preview was active, revert the view
           if (previewActive) {
-              console.log("Clearing active preview state.");
-              if (versionIndex === versions.length) {
-                  loadHeadState(); // Revert to HEAD
-              } else {
-                  loadVersionState(versionIndex); // Revert to current version
-              }
-              // Note: loadHeadState/loadVersionState handle resetting previewActive flag
-          } else {
-              updateNav(); // Just update button states if no preview was active
-          }
+              if (versionIndex === versions.length) loadHeadState(); else loadVersionState(versionIndex);
+          } else { updateNav(); }
           patchEditor.focus();
       };
-      previewBtnPatchArea.onclick = previewPatch; // Explicit preview button click
+      previewBtnPatchArea.onclick = previewPatch;
 
-      // Toolbar Navigation Buttons
-      prevBtn.onclick = () => {
-          console.log("Toolbar Previous clicked.");
-          if (previewActive) {
-              // If preview is active, "Previous" cancels the preview
-              clearBtnPatchArea.onclick(); // Use the clear logic to revert state
-          } else if (versionIndex > 0) {
-              // Otherwise, load the previous version
-              loadVersionState(versionIndex - 1);
-          }
-      };
-      nextBtn.onclick = () => {
-          console.log("Toolbar Next clicked.");
-          // "Next" only works if not in preview and not already at HEAD
-          if (!previewActive && versionIndex < versions.length) {
-              if (versionIndex + 1 === versions.length) {
-                  loadHeadState(); // Go to HEAD
-              } else {
-                  loadVersionState(versionIndex + 1); // Go to next older version (closer to HEAD)
-              }
-          }
-      };
-
-      // Toolbar Apply Button Logic (handles preview state correctly)
+prevBtn.onclick = () => {
+    if (previewActive) {
+        clearBtnPatchArea.onclick();
+    } else if (versionIndex === versions.length) {
+        // From Head to most recent backup
+        loadVersionState(0);
+    } else if (versionIndex < versions.length - 1) {
+        // From backup to next older backup
+        loadVersionState(versionIndex + 1);
+    }
+    // else do nothing (at oldest backup)
+};
+nextBtn.onclick = () => {
+    if (!previewActive && versions.length > 0 && versionIndex < versions.length) {
+        if (versionIndex === 0) {
+            // At most recent backup, next goes to Head
+            loadHeadState();
+        } else {
+            // Move toward more recent backup (lower index)
+            loadVersionState(versionIndex - 1);
+        }
+    }
+};
       applyBtnToolbar.onclick = async () => {
-        // Determine the correct filename to save and content
         const fileToSave = previewActive ? previewTargetFile : currentFile;
-        const contentToSave = compareText; // Always save the content from the right pane (modified view)
-
-        // Basic validation
-        if (!fileToSave) { toast("Cannot apply changes, target filename is unknown.", 'warn'); return; }
-
-        // Check if there are actually changes to save compared to what we think HEAD is
-        // Note: This check might be slightly complex if HEAD changed underneath us,
-        // but it prevents saving identical content unnecessarily.
-        const isEffectivelyUnchanged = (contentToSave === headText && fileToSave === currentFile && !previewActive);
-        if (isEffectivelyUnchanged) {
-             toast("No changes detected compared to the current view.", 'info');
-             return;
-        }
-
-        // Confirm if saving a new file or overwriting a different file than loaded
-        let confirmMsg = `Apply changes to '${fileToSave}'?`;
-        if (previewActive && fileToSave !== currentFile) {
-             confirmMsg = `This will apply changes to create or overwrite '${fileToSave}' (original context was '${currentFile}'). Proceed?`;
-        }
-        // Optional: Always confirm?
-        // if (!confirm(confirmMsg)) {
-        //      console.log("Apply cancelled by user.");
-        //      return;
-        // }
-
-
-        console.log(`Toolbar Apply clicked. Target file: '${fileToSave}'`);
+        const contentToSave = compareText;
+        if (!fileToSave) { toast("Target filename unknown.", 'warn'); return; }
         try {
             const backupLimit = parseInt(backupLimitInput.value, 10);
-            const payload = {
-                file: fileToSave, // Use the determined target file
-                text: contentToSave, // Content from the right pane
-                backupLimit: isNaN(backupLimit) || backupLimit < 0 ? 20 : backupLimit
-            };
-            console.log("Sending to /accept_changes:", JSON.stringify(payload));
-
-            const r = await fetch('/accept_changes', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
+            const payload = { file: fileToSave, text: contentToSave, backupLimit: isNaN(backupLimit) || backupLimit < 0 ? 20 : backupLimit };
+            const r = await fetch('/accept_changes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!r.ok) {
-                // Attempt to parse error from server response
-                let errorMsg = `HTTP ${r.status}`;
-                try {
-                    const errData = await r.json();
-                    errorMsg += (errData && errData.error) ? `: ${errData.error}` : `: ${await r.text()}`;
-                } catch (parseErr) { errorMsg += `: ${await r.text()}`; } // Fallback if JSON parsing fails
+                let errorMsg = `HTTP ${r.status}`; try { const errData = await r.json(); errorMsg += `: ${errData.error || await r.text()}`; } catch { errorMsg += `: ${await r.text()}`; }
                 throw new Error(errorMsg);
             }
-
-            console.log("Apply successful. Updating UI state.");
-            // If the save was for a different file than originally loaded,
-            // switch the UI context to that new file.
-            let fileContextChanged = false;
-            if (fileToSave !== currentFile) {
-                console.log(`File context changing from '${currentFile}' to '${fileToSave}'.`);
-                currentFile = fileToSave; // Update the main currentFile state
-                fileContextChanged = true;
-                // We need the new HEAD text for the file we just saved
-                headText = contentToSave; // The saved content *is* the new HEAD
-            } else {
-                 // Update headText to reflect the saved content for the existing currentFile
-                 headText = contentToSave;
-            }
-
-            compareText = headText; // Reset compare text to match new HEAD
-            patchEditor.setValue(''); // Clear patch editor
-            previewActive = false;
-            previewTargetFile = currentFile; // Reset preview target to the new currentFile
-            setDiff(headText, headText); // Show identical panes
-
-            // Fetch versions for the (potentially new) current file
-            await fetchVersions();
-
-            console.log("UI state updated after successful apply.");
-            // toast("Changes applied successfully!", "info"); // Optional success notification
-
-        } catch (e) {
-            toast(`Apply failed: ${e.message}`, 'error');
-            console.error("Apply operation failed:", e);
-            // Leave the diff showing the failed state? Or try to revert? Leaving it for now.
-        }
+            if (fileToSave !== currentFile) { currentFile = fileToSave; headText = contentToSave; }
+            else { headText = contentToSave; }
+            compareText = headText; patchEditor.setValue(''); previewActive = false; previewTargetFile = currentFile;
+            setDiff(headText, headText); await fetchVersions();
+        } catch (e) { toast(`Apply failed: ${e.message}`, 'error'); }
       };
 
-      // --- Perform Initial Load ---
-      loadInitialFile(); // Attempt to load file specified by server args
+      updateNav();
+      checkLlmAvailability();
+      loadInitialFile();
 
-    }); // End require callback
+      setTimeout(() => {
+        if (qs('diff-tab-content').classList.contains('active') && diffEditor) {
+          // diffEditor.layout();
+        }
+      }, 100);
+    });
   </script>
 </body>
 </html>
