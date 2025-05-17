@@ -1,36 +1,27 @@
-name: Vibe Patch CI
+name: Vibe CI
 
 on:
   push:
     branches: [ main ]
   pull_request:
-  workflow_dispatch:
+    branches: [ main ]
 
 jobs:
-  build-and-test:
+  build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: ⬇️ Check out code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v3
 
-      - name: 📂 Debug workspace contents
-        run: |
-          echo "Current directory: $(pwd)"
-          ls -R .
-
-      - name: 🐍 Set up Python
-        uses: actions/setup-python@v5
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: 3.11
 
-      - name: 📦 Install dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install flask
-          pip install PyYAML
-	  pip install autopep8
-	  
-      - name: ✅ Run regression tests
-        run: |
-          python tests/regression_tester.py
+          pip install -r requirements.txt
+          pip install autopep8
+
+      - name: Run regression tests
+        run: python tests/regression_tester.py
