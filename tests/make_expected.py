@@ -27,6 +27,7 @@ Usage:
 For each subdirectory in tests/, this script finds the single .vibe patch and the accompanying hello.py,
 applies the patch in dry‐run mode, and writes the resulting file to <patchname>.expected in that directory.
 """
+import autopep8
 import sys
 import importlib.util
 from pathlib import Path
@@ -71,7 +72,9 @@ def process_case(case_dir: Path) -> None:
 
     # Write expected
     out_path = case_dir / f"{patch_path.stem}.expected"
-    out_path.write_text(new_src)
+    formatted_src = autopep8.fix_code(new_src)
+
+    out_path.write_text(formatted_src)
     print(f"[OK]  {case_dir.name}/{out_path.name} created")
 
 

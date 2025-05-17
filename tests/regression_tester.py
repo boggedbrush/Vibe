@@ -104,6 +104,8 @@ def main():
     print("Done.")
     n_pass = 0
     for pass_fail, name in results:
+        if pass_fail is None:
+            pass_fail = False
         print(f"{['❌', '✅'][pass_fail]} {name}")
         n_pass += pass_fail
     if n_pass == len(results):

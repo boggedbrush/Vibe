@@ -1018,6 +1018,7 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
         _log(f"Error applying patch ({pt}) to {target.name}: {e}")
         raise
 
+    new_src = lint_code(new_src)
     if dry:
         return new_src 
 
@@ -1081,6 +1082,17 @@ def cmd_apply(args: argparse.Namespace) -> None:
     # batch‑aware apply
     patches = load_patches(args.patch)
     apply_patches(patches, args.repo, dry=args.dry)
+
+import autopep8
+
+def lint_code(src: str) -> str:
+    """
+    Takes a Python source code string and returns a PEP8-compliant
+    version of the source code using autopep8.
+    """
+    fixed_src = autopep8.fix_code(src, options={'aggressive': 1})
+    return fixed_src
+
 
 if __name__ == "__main__":
     cli = build_cli()
