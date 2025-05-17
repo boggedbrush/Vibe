@@ -40,7 +40,45 @@ Coding with AI can be fun, rewarding, and profitable, but it can also be frustra
    python server.py --baseDir ~/tmp/example        # launch server
    ```
 
-## Quick Start
+## Quickstart: Visual Patch Workflow
+
+Below is a step-by-step guide to using the Vibe Patch Diff UI, illustrated with screenshots.
+
+### 1. Launch the Vibe Server
+
+Open a terminal and run:
+
+```bash
+python launch_vibe.py
+```
+
+Select the Python file you wish to edit, then click Launch Server.
+
+2. Diff View: Load Your File
+
+After browsing and selecting your file, and launching the server, the Diff View will display the current file contents.
+
+3. Switch to LLM Patch Tab
+
+Click the LLM Patch tab to bring up the prompt interface.
+
+4. Enter Your Prompt
+
+Type your desired modification in the prompt box (e.g., “Please add a class that greets people”).
+
+5. Preview the Patch
+
+Click Preview Patch to view the patch preview. The diff view will update to show changes side-by-side.
+
+6. Apply the Patch
+
+Click Apply to accept the changes and update your file. The diff view now shows the new code as applied.
+
+    Tip: Use the Previous and Next buttons to navigate between backups.
+    Note: All screenshots are located in Vibe/docs/screenshots/.
+
+
+## (Quick Start for previous version)
 
 1. Open the tool in your browser at `http://localhost:8000`.
 2. Click **Load File** and select `hello.py`.
