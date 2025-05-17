@@ -85,23 +85,23 @@ Click Apply to accept the changes and update your file. The diff view now shows 
 
 ## Configuring AI Features (API Keys)
 
-To leverage the AI-driven patch generation capabilities of Vibe, you need to configure the necessary API key(s). Vibe uses the `python-dotenv` library to load these keys from a `.env` file in your project root, making configuration straightforward and secure.
+To leverage the AI-driven patch generation capabilities of Vibe, you need to configure your Google Gemini API key. Vibe uses the `python-dotenv` library to load this key from a `.env` file in your project root, making configuration straightforward and secure.
 
-Vibe primarily integrates with OpenAI models for patch generation.
+### Setting up your Google Gemini API Key with `.env`
 
-### Setting up your OpenAI API Key with `.env`
-
-1.  **Obtain an API Key**:
-    *   If you don't already have one, sign up on the [OpenAI Platform](https://platform.openai.com/).
-    *   Navigate to the API keys section of your OpenAI account settings and create a new secret key.
+1.  **Obtain a Gemini API Key**:
+    *   Visit [Google AI Studio](https://aistudio.google.com/).
+    *   You may need to sign in with your Google account and agree to the terms.
+    *   Once in AI Studio, click on "**Get API key**" (often found in the left sidebar or by clicking your profile/avatar).
+    *   Follow the prompts to create a new API key. Copy this key securely.
 
 2.  **Create a `.env` File**:
     *   In the root directory of your Vibe project (the `Vibe/` directory where `server.py` and `requirements.txt` are located), create a new file named `.env`.
-    *   Add your OpenAI API key to this file in the following format:
+    *   Add your Google Gemini API key to this file. The Vibe server typically expects this key under the environment variable name `GOOGLE_API_KEY`:
         ```env
-        OPENAI_API_KEY="your_sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        GOOGLE_API_KEY="your_google_api_key_here"
         ```
-        Replace `"your_sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"` with your actual OpenAI API key.
+        Replace `"your_google_api_key_here"` with your actual Gemini API key.
 
 3.  **Ensure `.env` is Ignored by Git (Crucial for Security)**:
     *   Your API key is sensitive information and should **never** be committed to version control.
@@ -112,7 +112,7 @@ Vibe primarily integrates with OpenAI models for patch generation.
     *   This will prevent Git from tracking your `.env` file and accidentally exposing your key.
 
 4.  **Launch the Server**:
-    *   With the `.env` file in place, `python-dotenv` (if integrated into `server.py` or a startup script) will automatically load the `OPENAI_API_KEY` into the environment when the application starts.
+    *   With the `.env` file in place, `python-dotenv` (assuming it's integrated into `server.py` or a startup script) will automatically load the `GOOGLE_API_KEY` into the environment when the application starts.
     *   Start the Vibe server as usual:
         ```bash
         python server.py --baseDir ~/tmp/example
@@ -122,14 +122,14 @@ Vibe primarily integrates with OpenAI models for patch generation.
 5.  **Verify Integration**:
     *   Open the Vibe UI in your browser.
     *   Navigate to the "LLM Patch" tab.
-    *   If the "Generate Patch" button is enabled and there are no error messages like "LLM generation is not available" or "Error checking LLM availability" in the status area below the prompt input, your API key is configured and loaded correctly.
+    *   If the "Generate Patch" button is enabled and there are no error messages like "LLM generation is not available" or "Error checking LLM availability" in the status area below the prompt input, your API key is likely configured correctly and the server is communicating with the Gemini API.
 
 **Important Security Reminders**:
 *   Always keep your API keys confidential.
-*   The `.env` file method is for local development. For production deployments, use your hosting provider's recommended way to manage secrets (e.g., environment variables set directly on the server, secret management services).
+*   The `.env` file method is for local development. For production deployments, use your hosting provider's recommended way to manage secrets (e.g., environment variables set directly on the server, secret management services like Google Cloud Secret Manager).
 *   **Double-check that `.env` is listed in your `.gitignore` file before committing any changes.**
 
-If Vibe supports other AI providers or configuration methods in the future, this section will be updated.
+If Vibe is configured to use a different environment variable name for the Gemini key, please adjust the `.env` file accordingly.
 
 ## (Quick Start for previous version)
 
