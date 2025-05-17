@@ -83,6 +83,64 @@ Click Apply to accept the changes and update your file. The diff view now shows 
     Tip: Use the Previous and Next buttons to navigate between backups.
     Note: All screenshots are located in Vibe/docs/screenshots/.
 
+## Configuring AI Features (API Keys)
+
+To leverage the AI-driven patch generation capabilities of Vibe, you need to configure the necessary API key(s). The Vibe server (`server.py`) uses these keys to communicate with the underlying AI model provider.
+
+Vibe primarily integrates with OpenAI models for patch generation.
+
+### Setting up your OpenAI API Key
+
+1.  **Obtain an API Key**:
+    *   If you don't already have one, sign up on the [OpenAI Platform](https://platform.openai.com/).
+    *   Navigate to the API keys section of your OpenAI account settings and create a new secret key.
+
+2.  **Set the Environment Variable**:
+    *   The Vibe server expects your OpenAI API key to be available as an environment variable named `OPENAI_API_KEY`.
+    *   You need to set this environment variable in the terminal session from which you launch the Vibe server.
+
+    **For Linux/macOS:**
+    ```bash
+    export OPENAI_API_KEY="your_sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    # Then launch the server, e.g.:
+    # python server.py --baseDir ~/tmp/example
+    ```
+
+    **For Windows (Command Prompt):**
+    ```cmd
+    set OPENAI_API_KEY="your_sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    REM Then launch the server, e.g.:
+    REM python server.py --baseDir C:\tmp\example
+    ```
+
+    **For Windows (PowerShell):**
+    ```powershell
+    $env:OPENAI_API_KEY="your_sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    # Then launch the server, e.g.:
+    # python server.py --baseDir C:\tmp\example
+    ```
+    Replace `"your_sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"` with your actual OpenAI API key.
+
+    *   **Persistent Configuration (Recommended)**: To avoid setting the variable every time, you can add the `export` command (for Linux/macOS) to your shell's configuration file (e.g., `~/.bashrc`, `~/.zshrc`, or `~/.profile`), or manage environment variables through your system settings on Windows.
+
+3.  **Launch the Server**:
+    *   After setting the environment variable, start the Vibe server as usual:
+        ```bash
+        python server.py --baseDir ~/tmp/example
+        ```
+
+4.  **Verify Integration**:
+    *   Open the Vibe UI in your browser.
+    *   Navigate to the "LLM Patch" tab.
+    *   If the "Generate Patch" button is enabled and there are no error messages like "LLM generation is not available" or "Error checking LLM availability" in the status area below the prompt input, your API key is likely configured correctly.
+
+**Important Security Note**:
+*   Always keep your API keys confidential.
+*   Do not hardcode API keys directly into scripts or commit them to version control. Using environment variables is a more secure practice.
+*   Ensure the machine running the Vibe server has restricted access if it stores sensitive API keys.
+
+If Vibe supports other AI providers or configuration methods (e.g., a dedicated configuration file) in the future, this section will be updated.
+
 
 ## (Quick Start for previous version)
 
