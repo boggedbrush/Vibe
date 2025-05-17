@@ -30,6 +30,7 @@ jobs:
           pip install flask
           pip install PyYAML
 	  pip install autopep8
+	  
       - name: ✅ Run regression tests
         run: |
           python tests/regression_tester.py
