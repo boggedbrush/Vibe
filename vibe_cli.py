@@ -1019,7 +1019,6 @@ def apply_patch(meta: Dict[str, Any], code: str, repo: Path, dry: bool=False):
         raise
 
     if dry:
-        print(new_src.rstrip())
         return new_src 
 
     try:
