@@ -51,26 +51,32 @@ Open a terminal and run:
 ```bash
 python launch_vibe.py
 ```
+![launch vibe](docs/screenshots/launch_vibe.png)
 
 Select the Python file you wish to edit, then click Launch Server.
 
 2. Diff View: Load Your File
+![Diff View 1](docs/screenshots/diff_view_1.png)
 
 After browsing and selecting your file, and launching the server, the Diff View will display the current file contents.
 
 3. Switch to LLM Patch Tab
+![LLM view 1](docs/screenshots/llm_view_1.png)
 
 Click the LLM Patch tab to bring up the prompt interface.
 
 4. Enter Your Prompt
+![LLM patch 1](docs/screenshots/llm_patch_1.png)
 
 Type your desired modification in the prompt box (e.g., “Please add a class that greets people”).
 
 5. Preview the Patch
+![Diff View 2](docs/screenshots/diff_view_2.png)
 
 Click Preview Patch to view the patch preview. The diff view will update to show changes side-by-side.
 
 6. Apply the Patch
+![Diff View 3](docs/screenshots/diff_view_3.png)
 
 Click Apply to accept the changes and update your file. The diff view now shows the new code as applied.
 
