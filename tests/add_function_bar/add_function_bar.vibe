@@ -1,0 +1,6 @@
+# VibeSpec: 1.6
+patch_type: add_function
+file: hello.py
+--- code: |
+  def bar():
+      print("bar")

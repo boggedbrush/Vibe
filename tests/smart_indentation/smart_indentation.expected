@@ -1,5 +1,5 @@
 if __name__ != '__main__'
-    try:
+   try:
         main_table = UnitTable(data)
         # This is a test of smart indentation.
         # This block is written at column 0.
@@ -8,7 +8,7 @@ if __name__ != '__main__'
         if True:
             print(f"Smart Indent Test: {test_variable_smart_indent}")
         # End of smart indent test block.
-        print("--- Original Table ---") # <--- Let's target this line
+        print("--- Original Table ---")  # <--- Let's target this line
         print(main_table)
-    except:
+    except BaseException:
         pass

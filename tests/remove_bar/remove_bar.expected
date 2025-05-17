@@ -1,0 +1,11 @@
+def foo(x):
+    print(f'foo({x})')
+
+
+class MyClass:
+
+    def compute(self, value):
+        pass
+
+    def old_method(self, *args):
+        print('MyClass.old_method', *args)

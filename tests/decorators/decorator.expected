@@ -4,15 +4,14 @@ def foo(x):
     # updated logic: double the input
     return x * 2
 
+
 @benchmark
 def new_feature(z):
     return z + 42
 
 
-
-
 class MyClass:
-    
+
     @classmethod
     @validate
     def compute(cls, value):
@@ -23,4 +22,3 @@ class MyClass:
     @cache_result
     def new_method(a, b):
         return a + b
-

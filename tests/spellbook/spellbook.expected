@@ -1,0 +1,57 @@
+# hello.py
+
+def demo():
+    book = Spellbook()
+    book.add_spell("Fireball")
+    book.add_spell("Teleport")
+    book.list_spells()
+    book.cast_spell("Fireball")
+    book.remove_spell("Invisibility")
+    book.remove_spell("Teleport")
+    book.list_spells()
+
+
+def cast_all_spells(book):
+    print("Casting all known spells:")
+    for spell in book.spells:
+        book.cast_spell(spell)
+
+
+def greet_wizard():
+    print("Greetings, mighty wizard!")
+
+
+class Spellbook:
+    def __init__(self):
+        self.spells = []
+
+    def add_spell(self, spell):
+        self.spells.append(spell)
+        print(f"Spell '{spell}' added!")
+
+    def remove_spell(self, spell):
+        if spell in self.spells:
+            self.spells.remove(spell)
+            print(f"Spell '{spell}' removed!")
+        else:
+            print(f"Spell '{spell}' not found!")
+
+    def cast_spell(self, spell):
+        if self.has_spell(spell):
+            print(f"Casting '{spell}'!")
+        else:
+            print(f"You don't know the spell '{spell}'!")
+
+    def list_spells(self):
+        print("Known spells:")
+        for spell in self.spells:
+            print(f"- {spell}")
+
+    def enhance_spell(self, spell, power_level):
+        if spell in self.spells:
+            print(f"Enhancing '{spell}' to power level {power_level}!")
+        else:
+            print(f"You can't enhance unknown spell '{spell}'!")
+
+    def has_spell(self, spell):
+        return spell in self.spells

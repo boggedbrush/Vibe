@@ -1,0 +1,6 @@
+# VibeSpec: 1.6
+
+# Remove the `bar` function from hello.py
+patch_type: remove_function
+file: hello.py
+name: bar

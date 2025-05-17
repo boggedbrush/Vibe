@@ -5,4 +5,3 @@ class Greeter:
 
     def greet(self):
         print("Greeter says hi!")
-

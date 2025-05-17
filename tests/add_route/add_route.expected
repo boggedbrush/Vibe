@@ -1,0 +1,19 @@
+# hello.py
+def greet(name):
+    print(f"Hello, {name}!")
+
+
+class Greeter:
+    def __init__(self, name):
+        print(f'Hello {name}')
+
+
+@app.route('/timestamp')
+def get_timestamp():
+    from datetime import datetime
+    return jsonify({'timestamp': datetime.now().isoformat()})
+
+
+# Entry point
+if __name__ == '__main__':
+    print('here')

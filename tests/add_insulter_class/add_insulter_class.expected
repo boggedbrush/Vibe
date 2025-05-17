@@ -2,14 +2,17 @@
 def greet(name):
     print(f"Hello, {name}!")
 
+
 class Greeter:
     def __init__(self, name):
         print(f'Hello {name}')
+
 
 class Insulter:
     """
     A class that issues a playful insult to a given name.
     """
+
     def __init__(self, name):
         self.name = name
 

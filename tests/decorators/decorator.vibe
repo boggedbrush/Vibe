@@ -1,7 +1,7 @@
 # VibeSpec: 1.6
 
 # 1) Replace decorated function `foo` in hello.py
-patch_type: add_function
+patch_type: replace_function
 file: hello.py
 name: foo
 --- code: |

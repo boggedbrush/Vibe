@@ -5,4 +5,3 @@ class Greeter:
 
     def greet(self):
         print("Greeter 2.0 at your service!")
-

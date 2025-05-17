@@ -2,9 +2,11 @@
 def greet(name):
     print(f"Hello, {name}!")
 
+
 class Greeter:
     def __init__(self, name):
         print(f'Hello {name}')
+
 
 # >>> Default append at EOF
 print("Finished patch tests")

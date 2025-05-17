@@ -3,8 +3,11 @@ def greet(name):
     print(f"Hello, {name}!")
 
 # >>> Inserted before Greeter class
+
+
 def helper():
     return True
+
 
 class Greeter:
     def __init__(self, name):

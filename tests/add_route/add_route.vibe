@@ -1,0 +1,11 @@
+# VibeSpec: 1.6
+patch_type: add_block
+file: hello.py
+position: before
+anchor: "^# Entry point"
+--- code: |
+    @app.route('/timestamp')
+    def get_timestamp():
+        from datetime import datetime
+        return jsonify({'timestamp': datetime.now().isoformat()})
+

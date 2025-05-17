@@ -2,10 +2,10 @@
 def greet(name):
     print(f"Hello, {name}!")
 
+
 class Greeter:
     def __init__(self, name):
         print(f'Greetings, {name}! (new)')
 
     def greet(self):
         print("Greeter 2.0 at your service!")
-

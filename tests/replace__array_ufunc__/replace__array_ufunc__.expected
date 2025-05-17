@@ -10,14 +10,17 @@ from collections import OrderedDict
 from typing import Dict, Tuple, Sequence
 
 # Initialize the pint Unit Registry globally
-# Allow users to potentially replace this with their own configured registry if needed
+# Allow users to potentially replace this with their own configured
+# registry if needed
 ureg = pint.UnitRegistry()
 
+
 class UnitArray:
-    def __init__(self, data: npt.ArrayLike, unit: Union[pint.Unit, str, None, pint.Quantity]):
+    def __init__(self, data: npt.ArrayLike,
+                 unit: Union[pint.Unit, str, None, pint.Quantity]):
         """
         Initialize a UnitArray.
-    
+
         Parameters
         ----------
         data : npt.ArrayLike
@@ -39,9 +42,9 @@ class UnitArray:
         """
         if method != '__call__':
             # For now, we only support direct calls to ufuncs.
-            # Operations like ufunc.reduce, ufunc.accumulate, etc., are not yet implemented.
+            # Operations like ufunc.reduce, ufunc.accumulate, etc., are not yet
+            # implemented.
             return NotImplemented
-    
-        processed_inputs = []
-        any_unit_array_input = False # Track if any input was a UnitArray
 
+        processed_inputs = []
+        any_unit_array_input = False  # Track if any input was a UnitArray
