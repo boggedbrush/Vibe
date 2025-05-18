@@ -120,7 +120,7 @@ To leverage the AI-driven patch generation capabilities of Vibe, you need to con
 	Browse to the file you'd like to edit, then click "Launch Server"
 
 5.  **Verify Integration**:
-    *   Open the Vibe UI in your browser. (if not already opened by Launch Server click)
+    *   Open the Vibe UI in your browser: http://127.0.0.1:8000/. (if not already opened by Launch Server click)
     *   Navigate to the "LLM Patch" tab.
     *   If the "Generate Patch" button is enabled and there are no error messages like "LLM generation is not available" or "Error checking LLM availability" in the status area below the prompt input, your API key is likely configured correctly and the server is communicating with the Gemini API.
 
