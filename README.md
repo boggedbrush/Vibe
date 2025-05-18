@@ -115,12 +115,12 @@ To leverage the AI-driven patch generation capabilities of Vibe, you need to con
     *   With the `.env` file in place, `python-dotenv` (assuming it's integrated into `server.py` or a startup script) will automatically load the `GOOGLE_API_KEY` into the environment when the application starts.
     *   Start the Vibe server as usual:
         ```bash
-        python server.py --baseDir ~/tmp/example
+        python launch_vibe.py
         ```
-        No special `export` or `set` commands are needed beforehand.
+	Browse to the file you'd like to edit, then click "Launch Server"
 
 5.  **Verify Integration**:
-    *   Open the Vibe UI in your browser.
+    *   Open the Vibe UI in your browser. (if not already opened by Launch Server click)
     *   Navigate to the "LLM Patch" tab.
     *   If the "Generate Patch" button is enabled and there are no error messages like "LLM generation is not available" or "Error checking LLM availability" in the status area below the prompt input, your API key is likely configured correctly and the server is communicating with the Gemini API.
 

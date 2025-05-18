@@ -19,3 +19,4 @@ vibe_cpp
 *~
 *#
 Vibe/Backups/
+.env
