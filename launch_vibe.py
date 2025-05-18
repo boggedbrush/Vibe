@@ -16,7 +16,7 @@ import tkinter.font as tkFont # Added for font manipulation
 SERVER_SCRIPT_PATH = os.path.join(os.path.dirname(__file__), "server.py")
 SERVER_HOST_FOR_BROWSER = "127.0.0.1"
 SERVER_PORT = 8000
-DEFAULT_FONT_SIZE = 12
+DEFAULT_FONT_SIZE = 20
 
 # --- Argument Parsing for Font Size ---
 APP_FONT_SIZE = DEFAULT_FONT_SIZE
@@ -116,6 +116,7 @@ def launch_server():
 
     command = [
         sys.executable,
+        "-u", # Force the unbuffered output for stdout/stderr
         SERVER_SCRIPT_PATH,
         "--baseDir", str(derived_base_dir),
         "--initialFile", derived_filename,

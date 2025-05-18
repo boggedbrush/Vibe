@@ -105,6 +105,13 @@
     .prompt-section label {
         margin-left: 0; margin-bottom: 4px; font-weight: bold; flex-shrink: 0;
     }
+    #llm-provider-select {
+        margin-bottom: 8px; /* Space below the dropdown */
+        padding: 4px;
+        border-radius: 3px;
+        border: 1px solid #ccc;
+        background-color: white; /* Ensure it's not transparent */
+    }
     .prompt-section textarea {
         flex-grow: 1; width: 100%; box-sizing: border-box; resize: vertical;
         margin-bottom: 4px; min-height: 50px;
@@ -170,6 +177,10 @@
       <div id="llm-patch-tab-content" class="tab-pane">
         <div id="patchContainer">
           <div class="prompt-section">
+            <label for="llm-provider-select">Select LLM Provider:</label>
+            <select id="llm-provider-select">
+              {/* Options will be populated by JavaScript */}
+            </select>
             <label for="llm-prompt-input">LLM Prompt:</label>
             <textarea id="llm-prompt-input" placeholder="Describe the patch you want..."></textarea>
             <button id="generate-patch-btn">Generate Patch</button>
@@ -213,6 +224,7 @@
       const llmStatusDiv = qs('llm-status');
       const clearBtnPatchArea = qs('clearPatchBtn');
       const previewBtnPatchArea = qs('applyPatchBtn');
+      const llmProviderSelect = qs('llm-provider-select'); // New element
 
       let diffEditor;
       let patchEditor;
@@ -233,6 +245,9 @@
       let versionIndex = 0;
       let previewActive = false;
       let previewTargetFile = '';
+      let availableLlmProviders = {}; // To store { providerName: boolean_isConfigured }
+      let selectedLlmProvider = ''; // To store the currently selected provider key like "gemini" or "anthropic"
+
 
       const tabButtons = document.querySelectorAll('.tab-button');
       const tabPanes = document.querySelectorAll('.tab-pane');
@@ -255,53 +270,138 @@
           });
       });
 
+      const updateLlmUiBasedOnSelection = () => {
+          if (!llmProviderSelect || !generatePatchBtn || !llmPromptInput || !llmStatusDiv) return;
+
+          selectedLlmProvider = llmProviderSelect.value;
+          const isSelectedProviderConfigured = selectedLlmProvider && availableLlmProviders[selectedLlmProvider];
+          const selectedProviderText = llmProviderSelect.options[llmProviderSelect.selectedIndex]?.text || "Selected Provider";
+
+
+          if (Object.keys(availableLlmProviders).filter(key => availableLlmProviders[key]).length === 0) { // No providers configured
+              llmStatusDiv.textContent = "No LLM providers are configured on the server.";
+              generatePatchBtn.disabled = true;
+              llmPromptInput.disabled = true;
+              llmProviderSelect.disabled = true;
+          } else if (!selectedLlmProvider) { // "-- Select Provider --" is chosen
+              llmStatusDiv.textContent = "Please select an LLM provider.";
+              generatePatchBtn.disabled = true;
+              llmPromptInput.disabled = true; // Can be true or false depending on desired UX
+              llmProviderSelect.disabled = false;
+          } else if (isSelectedProviderConfigured) { // A configured provider is selected
+              llmStatusDiv.textContent = `${selectedProviderText} is ready.`;
+              generatePatchBtn.disabled = false;
+              llmPromptInput.disabled = false;
+              llmProviderSelect.disabled = false;
+          } else { // A non-configured provider is somehow selected (should be disabled, but defensive)
+              llmStatusDiv.textContent = `${selectedProviderText} is not available on the server.`;
+              generatePatchBtn.disabled = true;
+              llmPromptInput.disabled = true;
+              llmProviderSelect.disabled = false;
+          }
+      };
+
       const checkLlmAvailability = async () => {
-          if (!generatePatchBtn || !llmPromptInput || !llmStatusDiv) {
+          if (!generatePatchBtn || !llmPromptInput || !llmStatusDiv || !llmProviderSelect) {
               console.warn("LLM UI elements for status check not found.");
               return;
           }
           try {
               const response = await fetch('/llm/status');
               if (!response.ok) {
-                  throw new Error(`HTTP error fetching LLM status: ${response.status}`);
+                  throw new Error(`HTTP error fetching LLM status: ${response.status} ${await response.text()}`);
               }
               const data = await response.json();
-              if (data.configured === true) {
-                  generatePatchBtn.disabled = false;
-                  llmPromptInput.disabled = false;
-                  if (llmStatusDiv.textContent.includes("not available") || llmStatusDiv.textContent.includes("Error checking")) {
-                     llmStatusDiv.textContent = "";
+              availableLlmProviders = data;
+
+              llmProviderSelect.innerHTML = '<option value="">-- Select Provider --</option>';
+
+              const providerDisplayNames = {
+                  "gemini": "Google Gemini",
+                  "anthropic": "Anthropic Claude",
+                  "openai": "OpenAI GPT"
+              };
+
+              let firstAvailableProviderKey = '';
+              let hasAnyConfigured = false;
+
+              Object.keys(availableLlmProviders).sort().forEach(providerKey => { // Sort for consistent order
+                  const option = document.createElement('option');
+                  option.value = providerKey;
+                  option.textContent = providerDisplayNames[providerKey] || providerKey.charAt(0).toUpperCase() + providerKey.slice(1);
+                  
+                  if (availableLlmProviders[providerKey]) {
+                      hasAnyConfigured = true;
+                      if (!firstAvailableProviderKey) {
+                          firstAvailableProviderKey = providerKey;
+                      }
+                  } else {
+                      option.disabled = true;
+                      option.textContent += " (Not Configured)";
                   }
+                  llmProviderSelect.appendChild(option);
+              });
+              
+
+              if (selectedLlmProvider && availableLlmProviders[selectedLlmProvider]) {
+                  llmProviderSelect.value = selectedLlmProvider;
+              } else if (firstAvailableProviderKey) {
+                  llmProviderSelect.value = firstAvailableProviderKey;
               } else {
-                  generatePatchBtn.disabled = true;
-                  llmPromptInput.disabled = true;
-                  llmStatusDiv.textContent = "LLM generation is not available on the server.";
-                  console.warn("LLM generation disabled: Server reports not configured.");
+                  llmProviderSelect.value = ""; 
               }
+              llmProviderSelect.disabled = !hasAnyConfigured && Object.keys(availableLlmProviders).length === 0;
+
+
           } catch (error) {
               console.error("Failed to check LLM availability:", error);
-              generatePatchBtn.disabled = true;
-              llmPromptInput.disabled = true;
               llmStatusDiv.textContent = "Error checking LLM availability.";
+              availableLlmProviders = {};
+              llmProviderSelect.innerHTML = '<option value="">-- Error Loading Providers --</option>';
+              llmProviderSelect.disabled = true;
+          } finally {
+              updateLlmUiBasedOnSelection();
           }
       };
 
-      if (generatePatchBtn && llmPromptInput && llmStatusDiv && patchEditor) {
+      if (llmProviderSelect) {
+          llmProviderSelect.addEventListener('change', updateLlmUiBasedOnSelection);
+      }
+
+      if (generatePatchBtn && llmPromptInput && llmStatusDiv && patchEditor && llmProviderSelect) {
           generatePatchBtn.addEventListener('click', async () => {
               const userPrompt = llmPromptInput.value.trim();
-              if (!userPrompt) {
-                  llmStatusDiv.textContent = 'Please enter a prompt.';
+              selectedLlmProvider = llmProviderSelect.value; 
+
+              if (!selectedLlmProvider) {
+                  llmStatusDiv.textContent = 'Please select an LLM provider.';
+                  toast('Please select an LLM provider.', 'warn');
                   return;
               }
+              if (!userPrompt) {
+                  llmStatusDiv.textContent = 'Please enter a prompt.';
+                  toast('Please enter a prompt.', 'warn');
+                  return;
+              }
+              if (!availableLlmProviders[selectedLlmProvider]) {
+                  llmStatusDiv.textContent = `${llmProviderSelect.options[llmProviderSelect.selectedIndex].text} is not configured on the server.`;
+                  toast(`${llmProviderSelect.options[llmProviderSelect.selectedIndex].text} is not configured. Check server setup.`, 'error');
+                  return;
+              }
+
               patchEditor.setValue('');
-              llmStatusDiv.textContent = 'Generating patch...';
+              const selectedProviderText = llmProviderSelect.options[llmProviderSelect.selectedIndex]?.text || selectedLlmProvider;
+              llmStatusDiv.textContent = `Generating patch with ${selectedProviderText}...`;
               generatePatchBtn.disabled = true;
               llmPromptInput.disabled = true;
+              llmProviderSelect.disabled = true;
+
               try {
                   const payload = {
                       prompt: userPrompt,
                       filename: currentFile || "",
-                      file_content: headText || ""
+                      file_content: headText || "",
+                      llm_provider: selectedLlmProvider 
                   };
                   console.log("Sending to /generate-patch:", payload);
 
@@ -312,7 +412,7 @@
                   });
                   const data = await response.json();
                   if (!response.ok) {
-                      throw new Error(data.error || `HTTP error! status: ${response.status}`);
+                      throw new Error(data.error || `HTTP error! status: ${response.status} ${await response.text()}`);
                   }
                   patchEditor.setValue(data.patch_content || '# No content received.');
                   llmStatusDiv.textContent = 'Patch generated.';
@@ -320,11 +420,9 @@
                   console.error('Error generating patch:', error);
                   llmStatusDiv.textContent = `Error: ${error.message}`;
                   patchEditor.setValue(`# Error generating patch:\n# ${error.message}`);
+                  toast(`Error generating patch: ${error.message}`, 'error');
               } finally {
-                  await checkLlmAvailability();
-                  if (!generatePatchBtn.disabled) {
-                    llmPromptInput.disabled = false;
-                  }
+                  await checkLlmAvailability(); 
                   updateNav();
               }
           });
@@ -345,16 +443,18 @@
         }
       };
 
-      const toast = (msg, level = 'error') => {
-        if (console && console[level]) { console[level](msg); } else { console.log(`[${level}] ${msg}`); }
-        alert(msg);
+      const toast = (msg, level = 'error') => { // Simple alert-based toast
+        const prefix = level === 'warn' ? 'Warning: ' : level === 'error' ? 'Error: ' : '';
+        // alert(prefix + msg); // Removed alert as it can be annoying. Console log is better.
+        console[level] ? console[level](prefix + msg) : console.log(prefix + msg);
       };
 
-      (function(){
+
+      (function(){ // DragV logic
         let startX, startW; const dragV = qs('dragV'); const btns = qs('patchBtns');
         const patchCont = qs('patchContainer');
         if (!dragV || !btns || !patchCont || !dragV.parentElement || dragV.parentElement.parentElement !== patchCont) {
-             return;
+             console.warn("DragV elements not found for splitter."); return;
         }
         dragV.addEventListener('mousedown', e => {
             startX = e.clientX; startW = btns.offsetWidth;
@@ -365,7 +465,7 @@
         function onMove(e) {
             const delta = e.clientX - startX;
             const patchContainerWidth = patchCont.offsetWidth;
-            const minEditorWidth = 100 + 4;
+            const minEditorWidth = 100 + dragV.offsetWidth; // Account for dragV width
             const newW = Math.min(patchContainerWidth - minEditorWidth, Math.max(60, startW + delta));
             btns.style.flexBasis = newW + 'px';
         }
@@ -445,24 +545,26 @@
               versionIndex = versions.length; updateNav();
           } else { toast(`Failed to load HEAD content for ${currentFile}.`, 'error'); }
       };
-const loadVersionState = async (index) => {
-    if (index < 0 || index >= versions.length || !versions[index] || !currentFile) return;
-    const version = versions[index]; const sha = version.sha;
-    const currentHeadContent = await loadFileContent(currentFile);
-    if (currentHeadContent === null) { toast(`Failed to reload HEAD for version ${sha}.`, 'error'); return; }
-    headText = currentHeadContent;
-    const versionContent = await loadVersionContent(currentFile, sha);
-    if (versionContent !== null) {
-        compareText = versionContent; setDiff(headText, compareText);
-        previewActive = false; previewTargetFile = currentFile;
-        versionIndex = index; updateNav();
-    } else { toast(`Failed to load content for version ${sha}.`, 'error'); await loadHeadState(); }
-};
+      const loadVersionState = async (index) => {
+          if (index < 0 || index >= versions.length || !versions[index] || !currentFile) return;
+          const version = versions[index]; const sha = version.sha;
+          const currentHeadContent = await loadFileContent(currentFile);
+          if (currentHeadContent === null) { toast(`Failed to reload HEAD for version ${sha}.`, 'error'); return; }
+          headText = currentHeadContent;
+          const versionContent = await loadVersionContent(currentFile, sha);
+          if (versionContent !== null) {
+              compareText = versionContent; setDiff(headText, compareText);
+              previewActive = false; previewTargetFile = currentFile;
+              versionIndex = index; updateNav();
+          } else { toast(`Failed to load content for version ${sha}.`, 'error'); await loadHeadState(); }
+      };
 
       const previewPatch = async () => {
         patchText = patchEditor.getValue() ?? '';
         if (!patchText.trim()) {
-            if (versionIndex === versions.length) await loadHeadState(); else await loadVersionState(versionIndex);
+            if (previewActive) { // If a preview was active, revert it by reloading state
+                 if (versionIndex === versions.length) await loadHeadState(); else await loadVersionState(versionIndex);
+            } // else no patch and no preview, do nothing.
             return;
         }
         if (!currentFile) { toast("Cannot preview patch, no base file loaded.", 'warn'); return; }
@@ -470,22 +572,46 @@ const loadVersionState = async (index) => {
         console.log("previewPatch: patchText being sent to /apply:\n", patchText);
         try {
           const currentHeadContent = await loadFileContent(currentFile);
-          headText = currentHeadContent ?? '';
-          const response = await fetch('/apply', {
+          headText = currentHeadContent ?? ''; // Use current headText as original for diff
+          const response = await fetch('/apply', { // /apply is the dry-run endpoint
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ patch: patchText, file: currentFile })
+            body: JSON.stringify({ patch: patchText, file: currentFile }) // Send currentFile as the target for patch application
           });
           if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
-          const results = await response.json();
-          if (!results || typeof results !== 'object' || Object.keys(results).length === 0) throw new Error("Invalid patch response.");
+          const results = await response.json(); // Expects {"target_filename.py": "content", ...}
+          if (!results || typeof results !== 'object' || Object.keys(results).length === 0) throw new Error("Invalid patch response from /apply.");
+          
+          // Determine which file's content to show. If patch specifies a different file, use that.
+          // Otherwise, assume it's the currentFile.
+          let targetFileForResult = currentFile; 
+          let appliedContent = results[currentFile]; // Default to current file
+
+          // If patch might create/target a new file, the patch metadata should tell us this.
+          // For now, assume Vibe patch format's `file:` key determines the target.
+          // The /apply endpoint in server.py needs to return the content for the *actual* file targeted by the patch.
+          // Let's assume the first key in results is the primary target if currentFile isn't in results, or if there's only one.
           const resultFiles = Object.keys(results);
-          let targetFile = resultFiles[0]; let appliedContent = results[targetFile];
-          if (resultFiles.length > 1 && results.hasOwnProperty(currentFile)) {
-              targetFile = currentFile; appliedContent = results[currentFile];
+          if (resultFiles.length > 0) {
+              if (results.hasOwnProperty(currentFile)) {
+                  targetFileForResult = currentFile;
+                  appliedContent = results[currentFile];
+              } else {
+                  // If currentFile is not in results, take the first file from results
+                  // This covers cases where a patch might target a new file or a different existing file.
+                  targetFileForResult = resultFiles[0];
+                  appliedContent = results[targetFileForResult];
+              }
+          } else {
+              throw new Error("Patch response did not contain any file content.");
           }
-          if (typeof appliedContent !== 'string') throw new Error("Patch content not string.");
-          compareText = appliedContent; previewTargetFile = targetFile; previewActive = true;
-          setDiff(headText, compareText); updateNav();
+
+          if (typeof appliedContent !== 'string') throw new Error("Patch content in response is not a string.");
+          
+          compareText = appliedContent; 
+          previewTargetFile = targetFileForResult; // This is the file that was effectively modified by the patch
+          previewActive = true;
+          setDiff(headText, compareText); // Original is headText of *currentFile*, modified is compareText of *previewTargetFile*
+          updateNav();
 
           const diffViewTabButton = document.querySelector('.tab-button[data-tab="diff-tab-content"]');
           if (diffViewTabButton && !diffViewTabButton.classList.contains('active')) {
@@ -493,7 +619,11 @@ const loadVersionState = async (index) => {
           } else if (diffViewTabButton && diffViewTabButton.classList.contains('active')) {
               if (diffEditor) diffEditor.layout();
           }
-        } catch(e) { toast(`Patch preview failed: ${e.message}`, 'error'); }
+        } catch(e) { 
+            toast(`Patch preview failed: ${e.message}`, 'error'); 
+            // If preview fails, revert to non-preview state
+            if (versionIndex === versions.length) await loadHeadState(); else await loadVersionState(versionIndex);
+        }
       };
 
       copyPromptBtn.onclick = () => {
@@ -520,13 +650,13 @@ You are **VibePatchGPT**, an assistant that speaks **only** in valid Vibe Patch 
     -   \`add_function\`, \`replace_function\`, \`remove_function\`
     -   \`add_method\`, \`replace_method\`, \`remove_method\`
     -   \`add_class\`, \`replace_class\`, \`remove_class\`
-    -   \`add_block\`, \`remove_block\`
+    -   \`add_block\`, \`remove_block\`, \`replace_block\`
 -   \`file\`: relative path to the target file
 -   \`class\`: required for method patches
--   \`name\`: required for named removals (\`remove_*\`)
+-   \`name\`: required for named removals (\`remove_*\`) and replacements (\`replace_function\`, \`replace_method\`, \`replace_class\`)
 -   \`position\`: for \`add_block\` (\`start\`, \`end\`, \`before\`, \`after\`)
 -   \`anchor\`: for \`add_block\` before/after
--   \`anchor_start\` & \`anchor_end\`: for \`remove_block\` by range
+-   \`anchor_start\` & \`anchor_end\`: for \`remove_block\` and \`replace_block\` by range
 
 ### Code Block
 
@@ -548,23 +678,24 @@ Always output only the patch YAML content. No extra text.
 
        const loadInitialFile = async () => {
            if (typeof window.INITIAL_FILE === 'string' && window.INITIAL_FILE) {
-               currentFile = window.INITIAL_FILE; previewTargetFile = currentFile;
+               currentFile = window.INITIAL_FILE; 
+               // previewTargetFile = currentFile; // Set only after successful load or preview
                const initialContent = await loadFileContent(currentFile);
                if (initialContent !== null) {
-                   headText = initialContent; compareText = initialContent;
+                   headText = initialContent; compareText = initialContent; previewTargetFile = currentFile;
                    setDiff(headText, compareText); patchEditor.setValue(''); previewActive = false;
-                   loadPatchBtn.disabled = false; await fetchVersions();
+                   loadPatchBtn.disabled = false; await fetchVersions(); // versionIndex set here
                } else {
                    toast(`Error autoloading '${currentFile}'. Load manually.`, 'error');
                    currentFile = headText = compareText = previewTargetFile = '';
                    versions = []; versionIndex = 0; previewActive = false; loadPatchBtn.disabled = true;
                    setDiff('', ''); updateNav();
                }
-           } else { updateNav(); }
-           updateNav();
+           } else { updateNav(); } // No initial file, just update nav
+           // updateNav(); // Already called by fetchVersions or the else block
        };
 
-      patchEditor.setValue('');
+      patchEditor.setValue(''); // Initialize empty
       loadFileBtn.onclick = () => fileInput1.click();
       fileInput1.onchange = async e => {
           const f = e.target.files[0]; if (!f) return;
@@ -582,7 +713,9 @@ Always output only the patch YAML content. No extra text.
       fileInput2.onchange = async e => {
           const f = e.target.files[0]; if (!f) return;
           try {
-            const txt = await f.text(); patchEditor.setValue(txt); updateNav(); await previewPatch();
+            const txt = await f.text(); patchEditor.setValue(txt); 
+            // updateNav(); // previewPatch will call updateNav
+            await previewPatch();
           } catch (err) { toast(`Error loading patch file: ${err.message}`, 'error'); }
           finally { e.target.value = null; }
       };
@@ -590,62 +723,76 @@ Always output only the patch YAML content. No extra text.
 
       clearBtnPatchArea.onclick = () => {
           patchEditor.setValue('');
-          if (previewActive) {
+          if (previewActive) { // If a preview was active, revert it
               if (versionIndex === versions.length) loadHeadState(); else loadVersionState(versionIndex);
-          } else { updateNav(); }
+          } else { // No preview, just update nav (disables preview button)
+              updateNav(); 
+          }
           patchEditor.focus();
       };
       previewBtnPatchArea.onclick = previewPatch;
 
-prevBtn.onclick = () => {
-    if (previewActive) {
-        clearBtnPatchArea.onclick();
-    } else if (versionIndex === versions.length) {
-        // From Head to most recent backup
-        loadVersionState(0);
-    } else if (versionIndex < versions.length - 1) {
-        // From backup to next older backup
-        loadVersionState(versionIndex + 1);
-    }
-    // else do nothing (at oldest backup)
-};
-nextBtn.onclick = () => {
-    if (!previewActive && versions.length > 0 && versionIndex < versions.length) {
-        if (versionIndex === 0) {
-            // At most recent backup, next goes to Head
-            loadHeadState();
-        } else {
-            // Move toward more recent backup (lower index)
-            loadVersionState(versionIndex - 1);
-        }
-    }
-};
+      prevBtn.onclick = () => {
+          if (previewActive) {
+              clearBtnPatchArea.onclick(); // This will revert the preview
+          } else if (versions.length > 0) {
+              if (versionIndex === versions.length) { // Currently at Head
+                  if (versions.length > 0) loadVersionState(0); // Go to most recent backup
+              } else if (versionIndex < versions.length - 1) { // Not at oldest backup
+                  loadVersionState(versionIndex + 1); // Go to next older backup
+              }
+              // else at oldest backup, do nothing
+          }
+      };
+      nextBtn.onclick = () => {
+          if (!previewActive && versions.length > 0 && versionIndex > 0) { // Not at Head and not previewing
+                loadVersionState(versionIndex - 1); // Go to next newer backup (or Head if versionIndex becomes 0 then handled)
+          } else if (!previewActive && versions.length > 0 && versionIndex === 0) { // At most recent backup
+                loadHeadState(); // Go to Head
+          }
+      };
       applyBtnToolbar.onclick = async () => {
         const fileToSave = previewActive ? previewTargetFile : currentFile;
-        const contentToSave = compareText;
-        if (!fileToSave) { toast("Target filename unknown.", 'warn'); return; }
+        const contentToSave = compareText; // This is the 'modified' pane content
+        if (!fileToSave) { toast("Target filename unknown. Cannot apply changes.", 'warn'); return; }
         try {
             const backupLimit = parseInt(backupLimitInput.value, 10);
-            const payload = { file: fileToSave, text: contentToSave, backupLimit: isNaN(backupLimit) || backupLimit < 0 ? 20 : backupLimit };
+            const payload = { 
+                file: fileToSave, 
+                text: contentToSave, 
+                backupLimit: isNaN(backupLimit) || backupLimit < 0 ? 20 : backupLimit 
+            };
             const r = await fetch('/accept_changes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
             if (!r.ok) {
                 let errorMsg = `HTTP ${r.status}`; try { const errData = await r.json(); errorMsg += `: ${errData.error || await r.text()}`; } catch { errorMsg += `: ${await r.text()}`; }
                 throw new Error(errorMsg);
             }
-            if (fileToSave !== currentFile) { currentFile = fileToSave; headText = contentToSave; }
-            else { headText = contentToSave; }
-            compareText = headText; patchEditor.setValue(''); previewActive = false; previewTargetFile = currentFile;
-            setDiff(headText, headText); await fetchVersions();
+            // After successful save, the saved content becomes the new head for 'fileToSave'
+            currentFile = fileToSave; // The file we just saved is now our primary file
+            headText = contentToSave; 
+            compareText = headText; 
+            patchEditor.setValue(''); 
+            previewActive = false; 
+            previewTargetFile = currentFile; // Reset preview target to the new current file
+            setDiff(headText, headText); 
+            await fetchVersions(); // This will fetch versions for the (potentially new) currentFile and update UI
+            toast(`Changes applied to ${fileToSave}`, 'info');
         } catch (e) { toast(`Apply failed: ${e.message}`, 'error'); }
       };
 
-      updateNav();
-      checkLlmAvailability();
-      loadInitialFile();
+      // Initial calls
+      checkLlmAvailability(); // This should be called first to populate and set initial LLM state
+      loadInitialFile().then(() => { // Ensure initial file is loaded before final nav update if needed
+        updateNav(); // General nav update
+      });
 
-      setTimeout(() => {
+
+      setTimeout(() => { // For initial layout of Monaco if hidden initially
         if (qs('diff-tab-content').classList.contains('active') && diffEditor) {
-          // diffEditor.layout();
+          diffEditor.layout();
+        }
+        if (qs('llm-patch-tab-content').classList.contains('active') && patchEditor) {
+          patchEditor.layout();
         }
       }, 100);
     });
