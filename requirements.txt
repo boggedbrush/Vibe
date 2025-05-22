@@ -3,3 +3,5 @@ PyYAML>=6.0
 autopep8>=2.3
 dotenv
 google.generativeai
+openai
+anthropic
