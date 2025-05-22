@@ -1,22 +1,28 @@
-# Byte-compiled / optimized files
+# Python specific
 __pycache__/
 *.py[cod]
 *$py.class
+.venv
 
-# Node modules
+# Node specific
 node_modules/
 
-# C++ build artifacts
+# C++ specific
 *.o
 *.out
 vibe_cpp
 
-# Editor files
-*.swp
-*.swo
+# Editor specific
 .idea/
 .vscode/
+*.swp
+*.swo
 *~
 *#
+
+# OS specific
+.DS_Store
+
+# Project specific
 Vibe/Backups/
 .env
